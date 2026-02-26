@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/session",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Session persistence for the Simulacra conversation engine — pluggable storage with file and in-memory providers",
   "type": "module",
   "exports": {

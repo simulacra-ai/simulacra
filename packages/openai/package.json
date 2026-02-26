@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/openai",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "OpenAI provider for the Simulacra conversation engine",
   "type": "module",
   "exports": {

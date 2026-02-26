@@ -17,7 +17,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "^0.1.0",
+    "@simulacra-ai/core": "workspace:*",
     "@modelcontextprotocol/sdk": ">=1.0.0"
   },
   "license": "MIT"

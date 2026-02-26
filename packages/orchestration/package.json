@@ -1,0 +1,23 @@
+{
+  "name": "@simulacra-ai/orchestration",
+  "version": "0.1.0",
+  "description": "Subagent, background, and parallel workflow orchestration for the Simulacra conversation engine",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "peerDependencies": {
+    "@simulacra-ai/core": "^0.1.0"
+  },
+  "license": "MIT"
+}

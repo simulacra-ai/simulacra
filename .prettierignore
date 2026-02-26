@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Package files
+package-lock.json
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+
+# Markdown (Prettier pads tables, we prefer minimal)
+*.md
+
+# Temp
+.claude/

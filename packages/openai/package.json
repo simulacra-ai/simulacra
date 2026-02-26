@@ -1,0 +1,24 @@
+{
+  "name": "@simulacra-ai/openai",
+  "version": "0.1.0",
+  "description": "OpenAI provider for the Simulacra conversation engine",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "peerDependencies": {
+    "@simulacra-ai/core": "^0.1.0",
+    "openai": ">=4.0.0 <7.0.0"
+  },
+  "license": "MIT"
+}

@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/openai",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "OpenAI provider for the Simulacra conversation engine",
   "type": "module",
   "exports": {
@@ -17,8 +17,21 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.1",
+    "@simulacra-ai/core": "0.0.2",
     "openai": ">=4.0.0 <7.0.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/simulacra-ai/simulacra.git",
+    "directory": "packages/openai"
+  },
+  "homepage": "https://github.com/simulacra-ai/simulacra",
+  "keywords": [
+    "ai",
+    "llm",
+    "openai",
+    "gpt",
+    "agent"
+  ],
   "license": "MIT"
 }

@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/orchestration",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Subagent, background, and parallel workflow orchestration for the Simulacra conversation engine",
   "type": "module",
   "exports": {
@@ -17,7 +17,20 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.1"
+    "@simulacra-ai/core": "0.0.2"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/simulacra-ai/simulacra.git",
+    "directory": "packages/orchestration"
+  },
+  "homepage": "https://github.com/simulacra-ai/simulacra",
+  "keywords": [
+    "ai",
+    "llm",
+    "agent",
+    "orchestration",
+    "subagent"
+  ],
   "license": "MIT"
 }

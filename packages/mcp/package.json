@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/mcp",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "MCP (Model Context Protocol) client bridge for the Simulacra conversation engine",
   "type": "module",
   "exports": {
@@ -17,8 +17,20 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.1",
+    "@simulacra-ai/core": "0.0.2",
     "@modelcontextprotocol/sdk": ">=1.0.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/simulacra-ai/simulacra.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/simulacra-ai/simulacra",
+  "keywords": [
+    "ai",
+    "llm",
+    "mcp",
+    "model-context-protocol"
+  ],
   "license": "MIT"
 }

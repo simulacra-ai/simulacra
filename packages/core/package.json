@@ -1,7 +1,7 @@
 {
   "name": "@simulacra-ai/core",
-  "version": "0.0.1",
-  "description": "Multi-provider agentic conversation engine — core types, conversation base class, workflows, policies, and context transformers",
+  "version": "0.0.2",
+  "description": "Multi-provider agentic conversation engine: core types, conversation base class, workflows, policies, and context transformers",
   "type": "module",
   "exports": {
     ".": {
@@ -16,5 +16,17 @@
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist *.tsbuildinfo"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/simulacra-ai/simulacra.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/simulacra-ai/simulacra",
+  "keywords": [
+    "ai",
+    "llm",
+    "agent",
+    "workflow"
+  ],
   "license": "MIT"
 }

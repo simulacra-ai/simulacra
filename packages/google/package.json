@@ -17,7 +17,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.0.1",
+    "@simulacra-ai/core": "0.0.1",
     "@google/genai": ">=0.10.0 <2.0.0"
   },
   "license": "MIT"

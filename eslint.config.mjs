@@ -24,6 +24,7 @@ export default [
         clearInterval: "readonly",
         structuredClone: "readonly",
         process: "readonly",
+        fetch: "readonly",
         Buffer: "readonly",
         __dirname: "readonly",
         __filename: "readonly",

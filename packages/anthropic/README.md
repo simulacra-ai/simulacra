@@ -28,12 +28,26 @@ interface AnthropicProviderConfig {
   max_tokens?: number;
   thinking?: { enable: boolean; budget_tokens?: number };
   prompt_caching?: { system_prompt?: boolean; toolkit?: boolean };
+  claude_code_auth?: boolean;
 }
 ```
 
 Additional properties (`temperature`, `top_p`, etc.) spread into the API request.
 
 If `max_tokens` is not set, it defaults to 8192.
+
+## Claude Code Auth
+
+When Claude Code is installed and authenticated, its stored credentials can be used instead of managing API keys. Setting `claude_code_auth: true` causes the provider to use tokens from Claude Code's stored credentials, automatically managing token lifetime and renewal.
+
+```typescript
+const provider = new AnthropicProvider(new Anthropic(), {
+  model,
+  claude_code_auth: true,
+});
+```
+
+Claude Code auth is well-suited for local development and personal tooling where a Claude subscription is already active. Production systems should use API key authentication.
 
 ## Extended Thinking
 

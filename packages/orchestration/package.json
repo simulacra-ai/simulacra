@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/orchestration",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Subagent, background, and parallel workflow orchestration for the Simulacra conversation engine",
   "type": "module",
   "exports": {
@@ -17,7 +17,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.2"
+    "@simulacra-ai/core": "0.0.3"
   },
   "repository": {
     "type": "git",

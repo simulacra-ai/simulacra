@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/google",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Google Gemini provider for the Simulacra conversation engine",
   "type": "module",
   "exports": {
@@ -17,7 +17,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.2",
+    "@simulacra-ai/core": "0.0.3",
     "@google/genai": ">=0.10.0 <2.0.0"
   },
   "repository": {

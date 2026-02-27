@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/session",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Session persistence for the Simulacra conversation engine with pluggable file and in-memory storage",
   "type": "module",
   "exports": {
@@ -17,7 +17,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.2"
+    "@simulacra-ai/core": "0.0.3"
   },
   "repository": {
     "type": "git",

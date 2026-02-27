@@ -58,7 +58,7 @@ export class Conversation {
    *
    * @param provider - The model provider for executing requests.
    * @param policy - The policy for controlling request execution (default: retry + rate limiting).
-   * @param context_transformer - Transformer for modifying messages before sending (default: noop).
+   * @param context_transformer - Transformer for modifying messages before sending (default: ToolContextTransformer + CheckpointContextTransformer).
    * @param summarization_strategy - Strategy for generating checkpoint summaries (default: DefaultSummarizationStrategy).
    */
   constructor(
@@ -127,7 +127,10 @@ export class Conversation {
   }
 
   /**
-   * The most recent checkpoint state, if any.
+   * The most recent checkpoint state, containing the summary text and the ID
+   * of the last message included in the checkpoint. Available after a
+   * successful call to `checkpoint()`. Used by CheckpointContextTransformer
+   * to replace pre-checkpoint messages with the summary on subsequent prompts.
    */
   get checkpoint_state(): Readonly<CheckpointState> | undefined {
     return this.#checkpoint_state ? Object.freeze({ ...this.#checkpoint_state }) : undefined;
@@ -137,7 +140,10 @@ export class Conversation {
   }
 
   /**
-   * Whether this conversation is a checkpoint session.
+   * True when this conversation is an ephemeral child spawned to generate a
+   * checkpoint summary. Checkpoint sessions are short-lived, receive the
+   * conversation history as a summarization prompt, and are disposed after
+   * the summary is produced.
    */
   get is_checkpoint() {
     return this.#is_checkpoint;

@@ -100,9 +100,17 @@ export class BackgroundOrchestrator extends Orchestrator {
    * Snapshot of the worker's current state.
    */
   get_state(): WorkerState {
+    if (this.#status === "idle") {
+      return {
+        id: "",
+        status: "idle",
+        rounds: 0,
+        tool_call_count: 0,
+      };
+    }
     return {
       id: this.id,
-      status: this.#status as WorkerState["status"],
+      status: this.#status,
       rounds: this.rounds,
       tool_call_count: this.tool_call_count,
       latest_message: this.latest_message,

@@ -5,6 +5,11 @@ import type { BackgroundHandle, SubagentOptions, SubagentResult } from "./types.
 const ORCHESTRATION_TOOL_NAMES = new Set(["subagent", "background", "parallel"]);
 
 /**
+ * Context key used to propagate the remaining orchestration depth to child agents.
+ */
+export const ORCHESTRATION_DEPTH_KEY = "__orchestration_depth";
+
+/**
  * Remove orchestration tools from a toolkit to prevent child agents from nesting.
  *
  * @param toolkit - The toolkit to filter.
@@ -20,25 +25,29 @@ function strip_orchestration_tools(toolkit: ToolClass[]): ToolClass[] {
  * (for tool integration). Provides the shared child-spawning logic
  * that all orchestration patterns build on.
  *
- * By default, orchestration tools are stripped from child agents to
- * prevent nesting. Pass `strip_tools: false` to allow it.
+ * By default, `recursive_depth` is `0`, which strips orchestration tools
+ * from child agents to prevent nesting. Set to a positive number to allow
+ * that many levels of recursive orchestration, or `-1` for unlimited depth.
  */
 export abstract class Orchestrator {
   readonly #manager?: WorkflowManager;
   readonly #workflow?: Workflow;
-  readonly #strip_tools: boolean;
+  readonly #recursive_depth: number;
 
   /**
    * @param source - A `WorkflowManager` or `Workflow` to spawn children from.
-   * @param options.strip_tools - Remove orchestration tools from child agents. Defaults to `true`.
+   * @param options.recursive_depth - How many levels of recursive orchestration to allow. `0` (default) strips orchestration tools from children, `-1` allows unlimited nesting.
    */
-  constructor(source: WorkflowManager | Workflow, { strip_tools = true } = {}) {
+  constructor(source: WorkflowManager | Workflow, { recursive_depth = 0 } = {}) {
+    if (!Number.isInteger(recursive_depth) || recursive_depth < -1) {
+      throw new Error("invalid value for recursive_depth");
+    }
     if (source instanceof WorkflowManager) {
       this.#manager = source;
     } else {
       this.#workflow = source;
     }
-    this.#strip_tools = strip_tools;
+    this.#recursive_depth = recursive_depth;
   }
 
   /**
@@ -68,8 +77,8 @@ export abstract class Orchestrator {
    * Spawn a child agent with its own conversation and workflow.
    *
    * Creates a child conversation, assigns tools (stripping orchestration
-   * tools unless disabled), and starts the workflow. Returns a handle
-   * for awaiting, inspecting, or cancelling the child.
+   * tools when depth is exhausted), and starts the workflow. Returns a
+   * handle for awaiting, inspecting, or cancelling the child.
    *
    * @param prompt - The instruction to send to the child agent.
    * @param options - Configuration for the child agent (system prompt, tools, session forking, custom ID).
@@ -82,13 +91,16 @@ export abstract class Orchestrator {
       options?.system ?? conversation.system,
     );
     const toolkit = options?.toolkit ?? [...conversation.toolkit];
-    child.toolkit = this.#strip_tools ? strip_orchestration_tools(toolkit) : toolkit;
+    child.toolkit = this.#recursive_depth === 0 ? strip_orchestration_tools(toolkit) : toolkit;
+
+    const next_depth = this.#recursive_depth === -1 ? -1 : Math.max(0, this.#recursive_depth - 1);
+    const child_context = { [ORCHESTRATION_DEPTH_KEY]: next_depth };
 
     const parent = this.parent_workflow;
     const child_workflow =
       parent && parent.state !== "disposed"
-        ? parent.spawn_child(child, options?.id)
-        : new Workflow(child);
+        ? parent.spawn_child(child, options?.id, child_context)
+        : new Workflow(child, { context_data: child_context });
 
     let settled = false;
 

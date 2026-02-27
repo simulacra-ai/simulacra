@@ -1,6 +1,6 @@
 # Simulacra Core
 
-Core conversation engine, tool system, workflow management, policies, and context transformers for Simulacra.
+The core package is the foundation of Simulacra. It provides a model-agnostic conversation engine that handles streaming, tool execution, retry policies, and context management.
 
 ## Installation
 
@@ -16,187 +16,166 @@ import { AnthropicProvider } from "@simulacra-ai/anthropic";
 import Anthropic from "@anthropic-ai/sdk";
 
 const provider = new AnthropicProvider(new Anthropic(), { model: MODEL_NAME });
-const conversation = new Conversation(provider);
+using conversation = new Conversation(provider);
 
 await conversation.prompt("Hello!");
+
 console.log(conversation.messages);
 ```
 
 ## Conversation
 
-`Conversation` is a concrete class that accepts a `ModelProvider` at construction time. Provider packages (`@simulacra-ai/anthropic`, `@simulacra-ai/openai`, `@simulacra-ai/google`) supply `ModelProvider` implementations. All model-specific configuration (model name, token limits, thinking, caching) lives in the provider, not the conversation.
+The `Conversation` class is the central object that the rest of the system is built on top of. It manages message history, sends prompts, and streams responses. A conversation is created with a `ModelProvider`, which handles all model-specific concerns like API calls, token limits, and thinking configuration. Providers are available for Anthropic, OpenAI, and Google, and the extensibility model makes it straightforward to add others.
+
+The conversation itself is model-agnostic. All messages and state are represented in a normalized format, so conversations can be serialized, resumed, or switched to a different provider at any time.
 
 ```typescript
-const conversation = new Conversation(provider);
+// create a conversation with a system prompt
+using conversation = new Conversation(provider);
 conversation.system = "You are a helpful assistant.";
 
-const result = await conversation.prompt("Hello!");
+await conversation.prompt("Hello!");
+
 console.log(conversation.messages);
 ```
 
-Properties include `id`, `state`, `system`, `toolkit`, and `messages`.
+The [developer guide](DEVELOPER_GUIDE.md) includes the full API.
 
-Methods include `prompt(text)`, `send_message(contents)`, `cancel_response()`, `clear()`, `load(messages)`, `spawn_child(fork?, id?, system?, is_checkpoint?)`, and `checkpoint(config?)`.
+## Tools
 
-State transitions flow: `idle` → `awaiting_response` → `streaming_response` → `idle` (or `stopping` → `idle` on cancel, `disposed` on disposal).
+Tools give an AI model the ability to take actions and retrieve information. Each tool is a class with a `get_definition` static method describing what it does and an `execute` method that runs when the model calls it. Tools are registered on the conversation via `toolkit`.
 
-### Conversation Events
+> Note: A `WorkflowManager` must be created to drive the tool call loop.
 
-Key events for streaming: `message_start`, `content_update`, `message_complete`. For tool use: `content_start`, `content_complete`. For lifecycle: `state_change`, `dispose`.
+### Tool Definition
 
-See the [developer guide](DEVELOPER_GUIDE.md#events) for the full event reference.
+Each tool must provide a `ToolDefinition`, which declares its name, description, and parameters. The tool parameters can be primitives or complex types like arrays or objects with their own properties.
 
-## Tool System
+#### Parallel Behavior
 
-Tools are implemented via the `ToolClass` interface:
+The definition can include a `parallelizable` flag that tells the workflow engine how the tool should be executed. The flag defaults to `true`, allowing the engine to execute the tool in parallel when multiple tools are called in a batch. When explicitly disabled, the engine will execute the tool on its own before continuing to other tool calls.
+
+> Note: Tool call batches are processed in order. Tools within the same batch run concurrently. If a non-parallelizable tool appears between parallelizable ones, the calls before and after it run as separate batches.
+
+### Tool Context
+
+The tool class constructor receives a `ToolContext` object that gives the tool access to the conversation, the active workflow, and any application-specific data passed via `context_data`.
 
 ```typescript
-import type {
-  ToolClass,
-  ToolContext,
-  ToolDefinition,
-  ToolSuccessResult,
-  ToolErrorResult,
-} from "@simulacra-ai/core";
+import type { ToolContext, ToolDefinition, ToolSuccessResult } from "@simulacra-ai/core";
 
-class SearchTool {
-  #context: ToolContext;
+class WeatherTool {
+  constructor(context: ToolContext) {
+    // context includes conversation, workflow, and context_data
+  }
+
+  async execute({ city }: { city: string }): Promise<ToolSuccessResult> {
+    // called when the model invokes this tool
+    return { result: true, temperature: 72, conditions: "sunny" };
+  }
 
   static get_definition(): ToolDefinition {
     return {
-      name: "search",
-      description: "Search the web for information",
-      parameters: [
-        { name: "query", type: "string", required: true, description: "Search query" },
-        { name: "max_results", type: "number", required: false, default: 5 },
-      ],
-      parallelizable: true,
+      name: "get_weather",
+      description: "Get current weather for a city",
+      // parameter types: string, number, boolean, object, array
+      parameters: [{ name: "city", type: "string", required: true }],
+      // parallelizable defaults to true, set false for tools with side effects
     };
   }
-
-  constructor(context: ToolContext) {
-    this.#context = context;
-  }
-
-  async execute(params: {
-    query: string;
-    max_results?: number;
-  }): Promise<ToolSuccessResult | ToolErrorResult> {
-    const results = await doSearch(params.query, params.max_results ?? 5);
-    return { result: true, ...results };
-  }
-}
-
-conversation.toolkit = [SearchTool as ToolClass];
-```
-
-### ToolDefinition
-
-```typescript
-interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: ToolParameterDefinition[];
-  parallelizable?: boolean; // default: true
 }
 ```
-
-### ToolContext
-
-Every tool instance receives `{ conversation, workflow }` at construction time, plus any application-specific data passed via `context_data`.
-
-### Parameter Types
-
-`ToolParameterDefinition` supports: `string`, `number`, `boolean`, `object` (with nested `properties`), `array` (with `items`). String parameters support `enum` arrays. All types have `name`, `description?`, `required?`, and `default?`.
-
-### Parallel Execution
-
-The `parallelizable` flag (default `true`) controls batching in the workflow engine:
-
-- **`true` (default)**: the workflow can batch this tool call with other parallelizable calls into `Promise.all`
-- **`false`**: acts as a barrier; the workflow executes this tool alone, waiting for it to complete before continuing
-
-This allows tools with side effects or ordering requirements to be marked as sequential while allowing read-only tools to run concurrently.
 
 ## Workflows
 
-`WorkflowManager` is the agentic loop. It listens for tool-use responses, executes tools, sends results back, and repeats until the model produces a final response.
+The workflow engine drives the tool call loop and enables agentic behaviors. The `WorkflowManager` sits on top of the conversation object, managing workflow state and executing tools on the model's behalf, running them in parallel when possible, and feeding results back until the model produces a final response.
+
+The workflow manager emits events throughout its lifecycle, making it possible to observe the full agentic loop.
 
 ```typescript
-import { WorkflowManager } from "@simulacra-ai/core";
+// create a conversation and workflow manager
+using manager = new WorkflowManager(conversation);
 
-const manager = new WorkflowManager(conversation);
+// log the final message when the workflow completes
+manager.once("workflow_begin", (workflow) =>
+  workflow.once("workflow_end", () => {
+    console.log(conversation.messages.at(-1));
+  })
+);
+
 await conversation.prompt("Use my tools to answer this question.");
 ```
 
-For lower-level control, `Workflow` can be used directly — see the [developer guide](DEVELOPER_GUIDE.md#workflows).
-
-Key events: `workflow_end` (loop finished with reason `complete` | `cancel` | `error`), `workflow_update` (tool results sent), `state_change`. See the [developer guide](DEVELOPER_GUIDE.md#events) for the full event reference.
+The [developer guide](DEVELOPER_GUIDE.md#events) covers the full event reference.
 
 ## Policies
 
-Policies wrap the LLM request with cross-cutting concerns. All policies implement `execute(cancellation_token, fn, ...args)`.
+Policies control how the underlying model provider is called. They sit between the conversation and the provider, intercepting requests to add behavior like retries, rate limiting, or token budgets. Policies can be used individually or combined with `CompositePolicy`.
 
 ### RetryPolicy
 
 `RetryPolicy` retries failed requests with exponential backoff.
 
 ```typescript
-import { RetryPolicy } from "@simulacra-ai/core";
-
+// create a retry policy with an optional filter
 const policy = new RetryPolicy({
   max_attempts: 3,
   initial_backoff_ms: 1000,
   backoff_factor: 2,
-  retryable: (error) => error.error?.status === 429, // optional filter
+  retryable: (result) => result.error?.status === 429,
 });
-```
-
-### RateLimitPolicy
-
-`RateLimitPolicy` limits requests per time window. Pass it to the conversation constructor, then call `attach()` to subscribe to events.
-
-```typescript
-import { Conversation, RateLimitPolicy } from "@simulacra-ai/core";
-
-const policy = new RateLimitPolicy({ limit: 10, period_ms: 60_000 });
-const conversation = new Conversation(provider, policy);
-policy.attach(conversation);
-```
-
-### TokenLimitPolicy
-
-`TokenLimitPolicy` limits tokens per time window. Like `RateLimitPolicy`, it requires both constructor injection and `attach()`.
-
-```typescript
-import { Conversation, TokenLimitPolicy } from "@simulacra-ai/core";
-
-const policy = new TokenLimitPolicy({
-  period_ms: 60_000,
-  total_tokens_per_period: 120_000,
-});
-const conversation = new Conversation(provider, policy);
-policy.attach(conversation);
 ```
 
 ### CompositePolicy
 
-`CompositePolicy` chains multiple policies together.
+`CompositePolicy` chains multiple policies together, executing them from outer to inner.
 
 ```typescript
-import { CompositePolicy } from "@simulacra-ai/core";
-
+// combine rate limiting with retries
 const policy = new CompositePolicy(
   new RateLimitPolicy({ limit: 10, period_ms: 60_000 }),
   new RetryPolicy({ max_attempts: 3, initial_backoff_ms: 1000, backoff_factor: 2 }),
 );
 ```
 
+### RateLimitPolicy
+
+`RateLimitPolicy` limits requests per time window.
+
+```typescript
+// create a rate limit policy
+const policy = new RateLimitPolicy({ limit: 10, period_ms: 60_000 });
+
+// create a conversation with the policy
+using conversation = new Conversation(provider, policy);
+
+// attach so the policy can observe conversation events
+policy.attach(conversation);
+```
+
+### TokenLimitPolicy
+
+`TokenLimitPolicy` limits tokens per time window.
+
+```typescript
+// create a token limit policy
+const policy = new TokenLimitPolicy({
+  period_ms: 60_000,
+  total_tokens_per_period: 120_000,
+});
+
+// create a conversation with the policy
+using conversation = new Conversation(provider, policy);
+
+// attach so the policy can observe conversation events
+policy.attach(conversation);
+```
+
 ## Context Transformers
 
-Context transformers modify messages at two points: before sending (`transform_prompt`) and after receiving (`transform_completion`).
+Context transformers reshape messages on-the-fly without altering the stored conversation history. They operate at two points, before messages are sent to the model (`transform_prompt`) and after a response comes back (`transform_completion`). This enables history trimming, content filtering, or constraint enforcement without touching the original messages.
 
-By default, `Conversation` uses `ToolContextTransformer` and `CheckpointContextTransformer`. Pass a custom transformer to override.
+By default, `Conversation` uses `ToolContextTransformer` and `CheckpointContextTransformer`. A custom transformer can be passed to override this.
 
 ### ToolContextTransformer (default)
 
@@ -216,16 +195,16 @@ Pass-through that disables all conversation-level transformations.
 
 ### Provider Context Transformers
 
-Model providers can bundle their own transformers via `context_transformers`. These run before conversation-level transformers and handle provider-specific quirks automatically. The conversation reads them fresh on every request, supporting runtime provider swaps.
+Model providers can bundle their own transformers via `context_transformers`. These run before conversation-level transformers and handle provider-specific needs automatically.
 
-See the [developer guide](DEVELOPER_GUIDE.md#provider-context-transformers) for the `ProviderContextTransformer` interface.
+The [developer guide](DEVELOPER_GUIDE.md#provider-context-transformers) covers the `ProviderContextTransformer` interface.
 
 ## Utilities
 
-- **`TokenTracker`**: attach to a conversation to accumulate input/output token counts across requests
-- **`CancellationTokenSource` / `CancellationToken`**: cooperative cancellation for async operations
-- **`sleep(ms, cancellationToken?)`**: cancellable delay
-- **`deep_merge(original, supplemental)`**: recursive object merge
+- `TokenTracker`. Attaches to a conversation to accumulate input/output token counts across requests.
+- `CancellationTokenSource` / `CancellationToken`. Cooperative cancellation for async operations.
+- `sleep(ms, cancellationToken?)`. Cancellable delay.
+- `deep_merge(original, supplemental)`. Recursive object merge.
 
 ## License
 

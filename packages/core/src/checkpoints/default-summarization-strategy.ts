@@ -8,6 +8,12 @@ import type { SummarizationContext, SummarizationStrategy } from "./types.ts";
  * an instruction asking the model to produce a condensed summary.
  */
 export class DefaultSummarizationStrategy implements SummarizationStrategy {
+  /**
+   * Builds the summarization prompt from the conversation context. Assembles
+   * the previous checkpoint summary, system prompt, and recent messages into a
+   * structured text block, then appends instructions asking the model to produce
+   * a condensed summary suitable for continuing the conversation.
+   */
   build_prompt(context: SummarizationContext): Message[] {
     const sections: string[] = [];
 

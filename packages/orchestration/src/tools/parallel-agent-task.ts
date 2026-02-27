@@ -6,6 +6,7 @@ import type {
   ToolErrorResult,
   ToolSuccessResult,
 } from "@simulacra-ai/core";
+import { ORCHESTRATION_DEPTH_KEY } from "../orchestrator.ts";
 import { ParallelOrchestrator } from "../parallel-agent.ts";
 import { extract_response } from "./utils.ts";
 
@@ -27,7 +28,8 @@ class ParallelAgentTaskImpl implements Tool<ParallelParams, ParallelToolSuccess>
   readonly #agent: ParallelOrchestrator;
 
   constructor(context: ToolContext) {
-    this.#agent = new ParallelOrchestrator(context.workflow);
+    const depth = (context[ORCHESTRATION_DEPTH_KEY] as number) ?? 0;
+    this.#agent = new ParallelOrchestrator(context.workflow, { recursive_depth: depth });
   }
 
   async execute({ prompts, system, fork_session }: ParallelParams) {
@@ -91,5 +93,10 @@ class ParallelAgentTaskImpl implements Tool<ParallelParams, ParallelToolSuccess>
   }
 }
 
+/**
+ * Tool that lets a model run multiple subtasks concurrently, each handled by its
+ * own subagent with a separate conversation. All subagents start immediately and
+ * the tool returns once every subagent has completed.
+ */
 export const ParallelAgentTask: ToolClass<ParallelParams, ParallelToolSuccess> =
   ParallelAgentTaskImpl;

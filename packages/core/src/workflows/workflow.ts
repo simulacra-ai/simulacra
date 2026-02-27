@@ -222,13 +222,17 @@ export class Workflow {
    *
    * @param conversation - The conversation for the child workflow.
    * @param id - Optional custom ID for the child workflow.
+   * @param context_data - Additional context data to merge with this workflow's context data.
    * @returns The newly created child workflow.
    */
-  spawn_child(conversation: Conversation, id?: string) {
+  spawn_child(conversation: Conversation, id?: string, context_data?: Record<string, unknown>) {
     if (this.#state === "disposed") {
       throw new Error("invalid state");
     }
-    const child = new Workflow(conversation, { context_data: this.#context_data, parent: this });
+    const merged_context = context_data
+      ? { ...this.#context_data, ...context_data }
+      : this.#context_data;
+    const child = new Workflow(conversation, { context_data: merged_context, parent: this });
     if (id) {
       child.id = id;
     }

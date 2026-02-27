@@ -1,6 +1,6 @@
 # Developer Guide
 
-This guide covers core concepts (conversations, tools, workflows, policies, context transformers), the event system, and how to extend the library with new model providers, context transformers, and policies.
+This guide covers core concepts (conversations, tools, workflows, policies, context transformers) and the event system. For extending the library with new model providers, context transformers, and policies, see the [extensibility guide](EXTENSIBILITY.md).
 
 ## Conversation
 
@@ -14,7 +14,7 @@ The `Conversation` class manages the conversation state, message history, prompt
 - `toolkit`: Array of tool classes the model can call.
 - `messages`: Full message history containing all user and assistant messages.
 
-### Functions
+### Methods
 
 - `prompt(text)`: Sends a user message containing a single text block and requests a response.
 - `send_message(contents)`: Sends a user message with one or more content blocks (text, tool results, multi-modal, etc).
@@ -24,6 +24,12 @@ The `Conversation` class manages the conversation state, message history, prompt
 - `spawn_child(fork_session?, id?, system_prompt?, is_checkpoint?)`: Creates a child conversation. Optionally fork the message history, set a custom ID, override the system prompt, or mark as a checkpoint session.
 - `checkpoint(config?)`: Creates a checkpoint summary of the conversation. See [Checkpoints](#checkpoints).
 - `on(event, listener)` / `once(event, listener)` / `off(event, listener)`: Subscribe or unsubscribe to [conversation events](#conversation-events).
+
+### Child Conversations
+
+A conversation can spawn children via `spawn_child`. A child inherits the parent's provider, toolkit, and policies. The child can optionally fork the parent's message history, starting with a copy of all existing messages. When a child is created without forking the parent's conversation, it starts as a fresh conversation with no message history.
+
+Child conversations are the building block behind several higher-level features. The orchestration package uses them to give each subagent its own conversation. Checkpoints spawn an ephemeral child to generate a summary.
 
 ## Tools
 
@@ -60,7 +66,7 @@ conversation.toolkit = [GetTimeTool];
 
 Every tool's constructor receives a context object containing `conversation` and `workflow` references.
 
-**context_data** provides application-specific data to all tools in a workflow, such as database connections, loggers, or configuration. `context_data` is passed when creating the workflow manager, and tools access the data from their context parameter:
+**context_data** provides application-specific data to all tools in a workflow, such as database connections, loggers, or configuration. `context_data` is passed when creating the workflow manager, and its properties are spread directly into the tool context object so that tools can access them as top-level fields on the context parameter.
 
 ```typescript
 const workflowManager = new WorkflowManager(conversation, {
@@ -116,7 +122,7 @@ The tool acts as a barrier, executing alone and blocking other tool calls until 
 
 Workflows handle two primary concerns: executing tool calls requested by the model, and queuing messages to be processed after the current sequence completes.
 
-Workflows are the foundation for building agentic systems. The [@simulacra-ai/orchestration](../orchestration/README.md) package builds on workflows to add advanced message queuing, child workflows, and other primitives for complex agent orchestration.
+Workflows are the foundation for building agentic systems. The [@simulacra-ai/orchestration](../orchestration/README.md) package builds on workflows to add multi-agent patterns like subagents, parallel fan-out, and background workers.
 
 ### WorkflowManager
 
@@ -141,7 +147,7 @@ await conversation.prompt("What time is it in Tokyo?");
 
 - `on(event, listener)` / `once(event, listener)` / `off(event, listener)`: Subscribe or unsubscribe to [workflow manager events](#workflowmanager-events).
 
-State transitions flow: `idle` → `busy` → `idle` (on workflow completion) or `disposed` (on disposal).
+State transitions flow: `idle` > `busy` > `idle` (on workflow completion) or `disposed` (on disposal).
 
 The manager also transitions to `busy` during checkpoint generation and back to `idle` when the checkpoint completes.
 
@@ -162,7 +168,7 @@ The manager also transitions to `busy` during checkpoint generation and back to 
 
 - `start(message?)`: Starts the workflow. Optionally begins with an initial user message.
 - `cancel()`: Cancels the workflow, stopping any in-progress response.
-- `spawn_child(conversation, id?)`: Creates a child workflow. Child events bubble up as `child_workflow_event`.
+- `spawn_child(conversation, id?, context_data?)`: Creates a child workflow. Optionally merges additional context data into the child. Child events bubble up as `child_workflow_event`.
 - `queue_message(text)`: Queues a message to send after the current response completes.
 - `clear_queue()`: Clears all queued messages.
 - `on(event, listener)` / `once(event, listener)` / `off(event, listener)`: Subscribe or unsubscribe to [workflow events](#workflow-events).
@@ -262,6 +268,8 @@ await conversation.prompt("Hello!");
 
 ### Built-in Policies
 
+The following policies are included in the core package.
+
 Policy|Description|Options|Notes
 -|-|-|-
 `RetryPolicy`|Retries the request on failure with exponential backoff|`max_attempts`, `initial_backoff_ms`, `backoff_factor`, optional `retryable(result)`|Default if no policy specified
@@ -307,6 +315,8 @@ const conversation = new Conversation(provider, policy, new NoopContextTransform
 
 ### Built-in Transformers
 
+The following transformers are included in the core package.
+
 Transformer|Description|Notes
 -|-|-
 `ToolContextTransformer`|Removes orphaned tool calls without results|Default
@@ -337,7 +347,7 @@ Checkpoints summarize the conversation so far into a compact state, allowing lon
 
 ### Setup
 
-Checkpointing requires a `CheckpointContextTransformer` in the transformer pipeline (included by default) and a `WorkflowManager` wrapping the conversation (so the system reports "busy" during checkpoint generation).
+Checkpointing requires a `CheckpointContextTransformer` in the transformer pipeline (included by default). A `WorkflowManager` wrapping the conversation is recommended so the system reports "busy" during checkpoint generation, but it is not strictly required.
 
 ```typescript
 import { Conversation, WorkflowManager } from "@simulacra-ai/core";
@@ -355,28 +365,20 @@ const state = await conversation.checkpoint();
 // state = { message_id: "...", summary: "..." }
 ```
 
-This spawns a child conversation, sends the conversation history to the model via the `SummarizationStrategy`, and stores the resulting summary. The `WorkflowManager` transitions to "busy" during this process and back to "idle" when complete.
-
-### How It Works
-
-1. `checkpoint()` collects messages since the last checkpoint (or all messages if first)
-2. The `SummarizationStrategy` builds a prompt from those messages
-3. An ephemeral child conversation sends the prompt and receives the summary
-4. The summary and boundary message ID are stored as `checkpoint_state`
-5. On the next prompt, `CheckpointContextTransformer` replaces all messages before the boundary with a synthetic user message containing the summary
+The checkpoint process spawns a child conversation, sends the conversation history to the model via the `SummarizationStrategy`, and stores the resulting summary.
 
 ### Default Summarization Strategy
 
-`DefaultSummarizationStrategy` serializes the conversation (including system prompt and any previous checkpoint summary) into a structured prompt asking the model to produce a concise briefing. Custom strategies can be provided via the conversation constructor — see [Extensibility](EXTENSIBILITY.md#summarization-strategies).
+`DefaultSummarizationStrategy` serializes the conversation (including system prompt and any previous checkpoint summary) into a structured prompt asking the model to produce a concise briefing. Custom strategies can be provided via the conversation constructor. The [extensibility guide](EXTENSIBILITY.md#summarization-strategies) covers the interface and includes a full example.
 
 ## Events
 
-Conversation, Workflow, and WorkflowManager are event emitters. Events support observability, logging, streaming UI, or custom behavior. Listener signatures are `(event_data, emitter)` unless noted.
+Conversation, Workflow, and WorkflowManager emit events throughout their lifecycle. Events notify listeners of state changes, streaming data, tool execution, and other actions taken during a conversation or workflow.
 
 ```typescript
 // Stream text as it arrives
 conversation.on("content_update", (event) => {
-  if (event.content.type === "text") {
+  if (event.content.type === "text" && event.content.text) {
     process.stdout.write(event.content.text);
   }
 });
@@ -388,6 +390,30 @@ conversation.once("message_start", () => {
 ```
 
 For token usage tracking, see [Token Management](#token-management) above.
+
+### Child Event Bubbling
+
+Child conversations and workflows bubble their events up to their parents. When a child emits an event, the parent receives a corresponding event (`child_event` for conversations, `child_workflow_event` for workflows) containing the event name and arguments from the child.
+
+Event bubbling propagates through the entire tree. A parent observes events from its immediate children and all descendants. This makes it possible to track token usage across a conversation tree, aggregate logs from multiple workflows, or forward all events to external systems from a single listener.
+
+```typescript
+// Listen to child conversation events
+conversation.on("child_event", ({ event_name, event_args }) => {
+  if (event_name === "message_complete") {
+    const [event] = event_args;
+    console.log(`Child used ${event.usage.input_tokens} input, ${event.usage.output_tokens} output tokens`);
+  }
+});
+
+// Listen to child workflow events
+workflow.on("child_workflow_event", ({ event_name, event_args }) => {
+  if (event_name === "workflow_end") {
+    const [event] = event_args;
+    console.log(`Child workflow ended: ${event.reason}`);
+  }
+});
+```
 
 ### Conversation Events
 
@@ -438,27 +464,3 @@ Event|Payload Type|Notes
 `workflow_event`|`{ event_name, event_args }`|
 `lifecycle_error`|`{ error, operation, context? }`|Infrastructure or lifecycle failure
 `dispose`||
-
-### Child Event Bubbling
-
-Child conversations and workflows bubble their events up to their parents. When a child emits an event, the parent receives a corresponding event (`child_event` for conversations, `child_workflow_event` for workflows) containing the event name and arguments from the child.
-
-Event bubbling propagates through the entire tree. A parent observes events from its immediate children and all descendants. This makes it possible to track token usage across a conversation tree, aggregate logs from multiple workflows, or forward all events to external systems from a single listener.
-
-```typescript
-// Listen to child conversation events
-conversation.on("child_event", ({ event_name, event_args }) => {
-  if (event_name === "message_complete") {
-    const [event] = event_args;
-    console.log(`Child conversation used ${event.usage.total_tokens} tokens`);
-  }
-});
-
-// Listen to child workflow events
-workflow.on("child_workflow_event", ({ event_name, event_args }) => {
-  if (event_name === "workflow_end") {
-    const [event] = event_args;
-    console.log(`Child workflow ended: ${event.reason}`);
-  }
-});
-```

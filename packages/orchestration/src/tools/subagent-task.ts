@@ -6,6 +6,7 @@ import type {
   ToolErrorResult,
   ToolSuccessResult,
 } from "@simulacra-ai/core";
+import { ORCHESTRATION_DEPTH_KEY } from "../orchestrator.ts";
 import { SubagentOrchestrator } from "../subagent.ts";
 import { extract_response } from "./utils.ts";
 
@@ -25,7 +26,8 @@ class SubagentTaskImpl implements Tool<SubagentParams, SubagentToolSuccess> {
   readonly #agent: SubagentOrchestrator;
 
   constructor(context: ToolContext) {
-    this.#agent = new SubagentOrchestrator(context.workflow);
+    const depth = (context[ORCHESTRATION_DEPTH_KEY] as number) ?? 0;
+    this.#agent = new SubagentOrchestrator(context.workflow, { recursive_depth: depth });
   }
 
   async execute({ prompt, system, fork_session }: SubagentParams) {
@@ -80,4 +82,9 @@ class SubagentTaskImpl implements Tool<SubagentParams, SubagentToolSuccess> {
   }
 }
 
+/**
+ * Tool that lets a model spawn an autonomous subagent with its own conversation
+ * to handle a subtask independently. The subagent runs to completion and returns
+ * its final response.
+ */
 export const SubagentTask: ToolClass<SubagentParams, SubagentToolSuccess> = SubagentTaskImpl;

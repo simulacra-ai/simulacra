@@ -1,6 +1,6 @@
 # Simulacra OpenAI Provider
 
-OpenAI provider for the Simulacra conversation engine.
+The OpenAI provider allows Simulacra to use OpenAI models via the OpenAI SDK, including GPT, o1, and o3 series.
 
 ## Installation
 
@@ -15,8 +15,9 @@ import { Conversation } from "@simulacra-ai/core";
 import { OpenAIProvider } from "@simulacra-ai/openai";
 import OpenAI from "openai";
 
+// create a provider and conversation
 const provider = new OpenAIProvider(new OpenAI(), { model: MODEL_NAME });
-const conversation = new Conversation(provider);
+using conversation = new Conversation(provider);
 ```
 
 ### OpenAIProviderConfig
@@ -29,13 +30,6 @@ interface OpenAIProviderConfig {
 ```
 
 Additional properties (`temperature`, `top_p`, etc.) spread into the API request.
-
-## System Prompt Handling
-
-The provider automatically selects the correct system message role based on the model:
-
-- **GPT models** (`gpt-*`): uses `role: "system"`
-- **Other models** (o1, o3, etc.): uses `role: "developer"`
 
 ## License
 

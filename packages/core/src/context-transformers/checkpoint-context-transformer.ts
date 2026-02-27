@@ -8,6 +8,11 @@ import type { ContextTransformer, TransformContext } from "./types.ts";
  * the summary, maintaining proper message alternation.
  */
 export class CheckpointContextTransformer implements ContextTransformer {
+  /**
+   * Replaces all messages before the checkpoint boundary with a synthetic user
+   * message containing the checkpoint summary. Messages after the boundary are
+   * kept intact. Returns messages unchanged if no checkpoint is active.
+   */
   async transform_prompt(messages: Message[], context?: TransformContext): Promise<Message[]> {
     const checkpoint = context?.checkpoint;
     if (!checkpoint) {
@@ -32,6 +37,7 @@ export class CheckpointContextTransformer implements ContextTransformer {
     return [summary_message, ...messages.slice(boundary)];
   }
 
+  /** No-op. Returns the message unchanged. */
   transform_completion(message: AssistantMessage): Promise<AssistantMessage> {
     return Promise.resolve(message);
   }

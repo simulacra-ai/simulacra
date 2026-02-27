@@ -1,6 +1,6 @@
 # Simulacra Agent Orchestration
 
-Multi-agent orchestration patterns for the Simulacra conversation engine. Child agents run independently with their own conversations and tool access.
+The orchestration package provides multi-agent patterns for Simulacra. Real workloads often call for delegation, parallelism, or long-running background tasks. Each worker agent gets its own conversation and tool access, and the orchestrator manages spawning, cancellation, and result collection.
 
 ## Installation
 
@@ -10,82 +10,38 @@ npm install @simulacra-ai/core @simulacra-ai/orchestration
 
 ## Setup
 
-All orchestration patterns require a `WorkflowManager` wrapping a conversation with tools:
+All orchestration patterns build on top of a `WorkflowManager`. The orchestrator spawns child conversations from the parent, so each worker agent inherits the provider, tools, and system prompt.
 
 ```typescript
-import { Conversation, WorkflowManager } from "@simulacra-ai/core";
-
-const conversation = new Conversation(provider);
-conversation.toolkit = [/* your tools */];
-const workflowManager = new WorkflowManager(conversation);
+// create a conversation and workflow manager
+using conversation = new Conversation(provider);
+conversation.toolkit = [/* tools */];
+using workflowManager = new WorkflowManager(conversation);
 ```
 
-## Usage
+## Patterns
+
+Each pattern can be used in two ways. As a tool added to a conversation's toolkit, letting the model decide when and how to delegate. Or as a direct API call from application code for explicit control over orchestration.
 
 ### SubagentOrchestrator
 
-Spawns a child agent and blocks until it completes.
+The simplest pattern. Spawns a child agent, blocks until it completes, and returns the result.
 
 ```typescript
-import { SubagentOrchestrator } from "@simulacra-ai/orchestration";
-
+// spawn a subagent and wait for it to finish
 const agent = new SubagentOrchestrator(workflowManager);
 const result = await agent.execute("Analyze this data and report findings");
 
-console.log(result.end_reason); // "complete" | "cancel" | "error"
+console.log(result.end_reason); 
 console.log(result.messages);
-```
-
-### BackgroundOrchestrator
-
-A single background worker. Call `execute` once to start, then inspect or collect.
-
-```typescript
-import { BackgroundOrchestrator } from "@simulacra-ai/orchestration";
-
-using worker = new BackgroundOrchestrator(workflowManager);
-worker.execute("Monitor the feed for changes");
-
-// later
-worker.status; // "running" | "completed" | "cancelled"
-worker.done; // true when completed or cancelled
-worker.rounds; // number of agentic turns
-worker.tool_call_count; // total tool calls made
-worker.latest_message; // last assistant text
-
-const result = await worker.collect(); // await completion, get full result
-worker.cancel(); // cancel if still running
-// automatically disposed at end of scope
-```
-
-### BackgroundAgentPool
-
-Manages multiple background workers with batch operations.
-
-```typescript
-import { BackgroundAgentPool } from "@simulacra-ai/orchestration";
-
-using pool = new BackgroundAgentPool(workflowManager);
-
-const id1 = pool.start("Research topic A");
-const id2 = pool.start("Research topic B");
-const id3 = pool.start("Research topic C");
-
-pool.list(); // [id1, id2, id3]
-pool.state(id1, id2); // WorkerState[] with status, rounds, tool_call_count, latest_message
-pool.cancel(id2); // cancel a specific worker
-
-const done = pool.ack(); // pop all completed workers, returns their states
-// all remaining workers cancelled and cleaned up at end of scope
 ```
 
 ### ParallelOrchestrator
 
-Runs multiple prompts concurrently and waits for all to complete.
+Fans out multiple prompts concurrently and waits for all of them to complete. Each prompt gets its own agent, and all results are returned together.
 
 ```typescript
-import { ParallelOrchestrator } from "@simulacra-ai/orchestration";
-
+// fan out three tasks in parallel
 const agent = new ParallelOrchestrator(workflowManager);
 const results = await agent.execute([
   { prompt: "Analyze dataset A" },
@@ -94,29 +50,73 @@ const results = await agent.execute([
 ]);
 ```
 
-## LLM Tools
+### BackgroundOrchestrator
 
-Each pattern is available as a `ToolClass` for model-driven orchestration.
-
-> **Note:** By default, orchestration tools are stripped from child agents to prevent recursive nesting. Pass `strip_tools: false` to the `Orchestrator` constructor to allow it.
+A background worker that runs independently. Start it with `execute`, then check on it or collect results later.
 
 ```typescript
-import { OrchestrationToolkit } from "@simulacra-ai/orchestration";
+// start a background worker
+using worker = new BackgroundOrchestrator(workflowManager);
+worker.execute("Monitor the feed for changes");
 
-conversation.toolkit = [...conversation.toolkit, ...OrchestrationToolkit];
+// check on it later
+setTimeout(() => {
+  console.log(worker.status); 
+}, 5000);
+
+// wait for it to finish and get the full result
+const result = await worker.collect();
 ```
 
-Individual tools (`SubagentTask`, `BackgroundWorkerPool`, `ParallelAgentTask`) are also exported if you want to pick selectively.
+### BackgroundAgentPool
 
-`BackgroundWorkerPool` exposes a worker pool to the model with these actions:
+Manages multiple background workers with batch operations. Useful for parallelizing independent research or processing tasks where each worker runs on its own.
 
-Action|Description
--|-
-`start`|Launch one or more background workers (requires `prompts`)
-`list`|List all worker IDs
-`state`|Get status, rounds, tool calls, latest message (optional `ids`)
-`cancel`|Stop workers (requires `ids`)
-`ack`|Pop completed workers and return their states (optional `ids`)
+```typescript
+// create a pool and start some workers
+using pool = new BackgroundAgentPool(workflowManager);
+
+pool.start("Research topic A");
+pool.start("Research topic B");
+pool.start("Research topic C");
+
+// wait, then collect completed workers
+setTimeout(() => {
+  const done = pool.ack();
+}, 30000);
+```
+
+### Recursive Depth
+
+All three constructors (`SubagentOrchestrator`, `ParallelOrchestrator`, `BackgroundAgentPool`) accept a `{ recursive_depth }` option that controls how many levels of nested delegation the spawned agents are allowed to perform.
+
+```typescript
+const agent = new SubagentOrchestrator(workflowManager, { recursive_depth: 2 });
+```
+
+## Agentic Orchestration
+
+Orchestration patterns are also available as task tools that can be added to a model's toolkit, allowing the model to decide when and how to delegate work.
+
+```typescript
+// give the model access to all orchestration tools
+conversation.toolkit = [...conversation.toolkit, ...OrchestrationToolkit];
+
+// give the model access to specific tools
+conversation.toolkit = [...conversation.toolkit, SubagentTask, ParallelAgentTask, BackgroundTaskPool];
+```
+
+By default, spawned agents cannot delegate further. Nested delegation can be enabled by setting `ORCHESTRATION_DEPTH_KEY` in `context_data`.
+
+```typescript
+import { ORCHESTRATION_DEPTH_KEY } from "@simulacra-ai/orchestration";
+
+// allows one level of nested delegation (agent > subagent > sub-subagent)
+using manager = new WorkflowManager(conversation, {
+  context_data: { [ORCHESTRATION_DEPTH_KEY]: 1 },
+});
+```
+
 
 ## License
 

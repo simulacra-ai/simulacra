@@ -10,13 +10,16 @@ import type { SubagentOptions, WorkerState } from "./types.ts";
  */
 export class BackgroundAgentPool {
   #source: WorkflowManager | Workflow;
+  readonly #recursive_depth: number;
   readonly #agents = new Map<string, BackgroundOrchestrator>();
 
   /**
    * @param source - A `WorkflowManager` or `Workflow` to spawn workers from.
+   * @param options.recursive_depth - How many levels of recursive orchestration to allow in workers. Defaults to `0`.
    */
-  constructor(source: WorkflowManager | Workflow) {
+  constructor(source: WorkflowManager | Workflow, { recursive_depth = 0 } = {}) {
     this.#source = source;
+    this.#recursive_depth = recursive_depth;
   }
 
   /**
@@ -36,7 +39,9 @@ export class BackgroundAgentPool {
    * @param options - Configuration for the worker (system prompt, tools, session forking, custom ID).
    */
   start(prompt: string, options?: SubagentOptions): string {
-    const agent = new BackgroundOrchestrator(this.#source);
+    const agent = new BackgroundOrchestrator(this.#source, {
+      recursive_depth: this.#recursive_depth,
+    });
     agent.execute(prompt, options);
     this.#agents.set(agent.id, agent);
     return agent.id;

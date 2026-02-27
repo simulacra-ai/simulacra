@@ -7,6 +7,7 @@ import type {
   ToolSuccessResult,
 } from "@simulacra-ai/core";
 import { BackgroundAgentPool } from "../background-agent-pool.ts";
+import { ORCHESTRATION_DEPTH_KEY } from "../orchestrator.ts";
 import type { WorkerState } from "../types.ts";
 
 type BackgroundParams = {
@@ -22,13 +23,14 @@ type BackgroundToolSuccess = ToolSuccessResult & {
   workers?: WorkerState[];
 };
 
-class BackgroundWorkerPoolImpl implements Tool<BackgroundParams, BackgroundToolSuccess> {
+class BackgroundTaskPoolImpl implements Tool<BackgroundParams, BackgroundToolSuccess> {
   readonly #pool: BackgroundAgentPool;
 
   constructor(context: ToolContext) {
     const POOL_KEY = "__background_agent_pool";
     if (!context[POOL_KEY]) {
-      context[POOL_KEY] = new BackgroundAgentPool(context.workflow);
+      const depth = (context[ORCHESTRATION_DEPTH_KEY] as number) ?? 0;
+      context[POOL_KEY] = new BackgroundAgentPool(context.workflow, { recursive_depth: depth });
     }
     const pool = context[POOL_KEY] as BackgroundAgentPool;
     pool.update_source(context.workflow);
@@ -149,5 +151,10 @@ class BackgroundWorkerPoolImpl implements Tool<BackgroundParams, BackgroundToolS
   }
 }
 
-export const BackgroundWorkerPool: ToolClass<BackgroundParams, BackgroundToolSuccess> =
-  BackgroundWorkerPoolImpl;
+/**
+ * Tool that lets a model manage a pool of background worker agents. Supports
+ * starting tasks, listing workers, checking state, cancelling, and collecting
+ * results without blocking the main conversation.
+ */
+export const BackgroundTaskPool: ToolClass<BackgroundParams, BackgroundToolSuccess> =
+  BackgroundTaskPoolImpl;

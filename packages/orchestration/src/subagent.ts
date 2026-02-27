@@ -4,8 +4,9 @@ import type { SubagentOptions, SubagentResult } from "./types.ts";
 /**
  * Spawns a child agent and blocks until it completes.
  *
- * The child runs its own agentic loop with access to the parent's tools
- * (minus orchestration tools).
+ * The child runs its own agentic loop with access to the parent's tools.
+ * Orchestration tools are excluded when `recursive_depth` is 0 (the default)
+ * and included when a positive depth is configured.
  */
 export class SubagentOrchestrator extends Orchestrator {
   /**

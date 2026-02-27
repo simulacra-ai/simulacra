@@ -1,6 +1,6 @@
 # Simulacra Anthropic Provider
 
-Anthropic Claude provider for the Simulacra conversation engine.
+The Anthropic provider allows Simulacra to use Claude models via the Anthropic API, with support for extended thinking and prompt caching.
 
 ## Installation
 
@@ -15,8 +15,9 @@ import { Conversation } from "@simulacra-ai/core";
 import { AnthropicProvider } from "@simulacra-ai/anthropic";
 import Anthropic from "@anthropic-ai/sdk";
 
+// create a provider and conversation
 const provider = new AnthropicProvider(new Anthropic(), { model: MODEL_NAME });
-const conversation = new Conversation(provider);
+using conversation = new Conversation(provider);
 ```
 
 ### AnthropicProviderConfig
@@ -32,9 +33,11 @@ interface AnthropicProviderConfig {
 
 Additional properties (`temperature`, `top_p`, etc.) spread into the API request.
 
+If `max_tokens` is not set, it defaults to 8192.
+
 ## Extended Thinking
 
-Enable extended thinking to capture the model's chain-of-thought as `ThinkingMessageContent` blocks.
+Extended thinking captures the model's chain-of-thought reasoning as `ThinkingMessageContent` blocks in the conversation history. This makes the model's reasoning process visible and accessible alongside its regular output.
 
 ```typescript
 const provider = new AnthropicProvider(new Anthropic(), {
@@ -44,11 +47,11 @@ const provider = new AnthropicProvider(new Anthropic(), {
 });
 ```
 
-Both `thinking` and `redacted_thinking` blocks from the API are converted to Simulacra's `ThinkingMessageContent` type. If `max_tokens` is not set, it defaults to 8192.
+Both `thinking` and `redacted_thinking` blocks from the API are converted to Simulacra's `ThinkingMessageContent` type.
 
 ## Prompt Caching
 
-Prompt caching is enabled by default. The provider adds `cache_control` markers to the system prompt and tool definitions, avoiding re-processing static content on every turn.
+Prompt caching is enabled by default. The provider adds `cache_control` markers to the system prompt and tool definitions, avoiding re-processing static content on every turn. Multi-turn conversations benefit because subsequent turns read from the cache at a reduced rate.
 
 ```typescript
 const provider = new AnthropicProvider(new Anthropic(), {
@@ -61,7 +64,7 @@ const provider = new AnthropicProvider(new Anthropic(), {
 });
 ```
 
-Cache writes cost slightly more per token than standard requests. Multi-turn conversations benefit because subsequent turns read from the cache at a reduced rate. Disable by setting both flags to `false`.
+Cache writes cost slightly more per token than standard requests. Caching can be disabled by setting both flags to `false`.
 
 ## License
 

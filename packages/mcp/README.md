@@ -1,6 +1,6 @@
 # Simulacra MCP Bridge
 
-MCP (Model Context Protocol) client bridge for the Simulacra conversation engine. Connects to MCP servers and exposes their tools as Simulacra tool classes.
+The MCP (Model Context Protocol) bridge connects Simulacra to MCP tool servers and exposes their tools as Simulacra tool classes, so the model can use them without writing custom tool implementations.
 
 ## Installation
 
@@ -12,10 +12,9 @@ npm install @simulacra-ai/core @simulacra-ai/mcp @modelcontextprotocol/sdk
 
 ```typescript
 import { Conversation, WorkflowManager } from "@simulacra-ai/core";
-import { AnthropicProvider } from "@simulacra-ai/anthropic";
-import Anthropic from "@anthropic-ai/sdk";
 import { McpToolProvider } from "@simulacra-ai/mcp";
 
+// connect to an MCP server
 const mcp = new McpToolProvider({
   servers: [
     {
@@ -25,20 +24,22 @@ const mcp = new McpToolProvider({
     },
   ],
 });
-
 await mcp.connect();
 
-const provider = new AnthropicProvider(new Anthropic(), { model: MODEL_NAME });
-const conversation = new Conversation(provider);
+// add MCP tools to the conversation's toolkit
+using conversation = new Conversation(provider);
 conversation.toolkit = [...conversation.toolkit, ...mcp.getToolClasses()];
-const manager = new WorkflowManager(conversation);
+using manager = new WorkflowManager(conversation);
 
 await conversation.prompt("List the files in /tmp");
 
+// disconnect when done
 await mcp.disconnect();
 ```
 
 ### Multiple Servers
+
+Multiple MCP servers can be configured at once. Tools from all servers are merged into a single toolkit.
 
 ```typescript
 const mcp = new McpToolProvider({
@@ -60,9 +61,10 @@ const mcp = new McpToolProvider({
 
 ### Tool Overrides
 
-By default, all MCP tools are `parallelizable: true`. Override specific tools with side effects or ordering requirements:
+By default, all MCP tools are `parallelizable: true`. Specific tools with side effects or ordering requirements can be overridden.
 
 ```typescript
+// inside the servers array
 {
   name: "database",
   command: "node",

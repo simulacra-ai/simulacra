@@ -77,7 +77,7 @@ export interface WorkerState {
   /**
    * The worker's current execution state.
    */
-  status: "running" | "completed" | "cancelled";
+  status: "idle" | "running" | "completed" | "cancelled";
   /**
    * Number of agentic turns (assistant messages) completed.
    */

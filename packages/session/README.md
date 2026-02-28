@@ -84,7 +84,7 @@ Checkpoint children have `auto_slug` disabled since their sessions are internal.
 
 ## Session Storage
 
-A `SessionStore` is the storage backend that a `SessionManager` reads from and writes to. The store handles listing, loading, saving, and deleting sessions. Two stores are included out of the box.
+A `SessionStore` is the storage backend that a `SessionManager` reads from and writes to. The store handles listing, loading, saving, and deleting sessions. Three stores are included out of the box.
 
 **FileSessionStore** persists sessions as JSON files on disk. Each session is a single `{id}.json` file. Child session relationships are indexed using hard links under `{parent-id}-forks/` directories.
 
@@ -97,6 +97,35 @@ const store = new FileSessionStore("./data/sessions");
 ```typescript
 const store = new InMemorySessionStore();
 ```
+
+**DrizzleSessionStore** persists sessions in a relational database using Drizzle ORM. It works with any database that Drizzle supports (PostgreSQL, MySQL, SQLite). The store does not import `drizzle-orm` itself. Instead, it accepts an adapter object with `list`, `load`, `upsert`, and `delete` functions that wrap Drizzle queries against the application's table.
+
+```typescript
+import { DrizzleSessionStore } from "@simulacra-ai/session";
+
+const store = new DrizzleSessionStore({
+  list: () =>
+    db.select().from(sessionsTable).orderBy(desc(sessionsTable.updated_at)),
+  load: async (id) => {
+    const [row] = await db
+      .select({ metadata: sessionsTable.metadata, messages: sessionsTable.messages })
+      .from(sessionsTable)
+      .where(eq(sessionsTable.id, id));
+    return row;
+  },
+  upsert: (row) =>
+    db.insert(sessionsTable).values(row).onConflictDoUpdate({
+      target: sessionsTable.id,
+      set: { metadata: row.metadata, messages: row.messages, updated_at: row.updated_at },
+    }),
+  delete: async (id) => {
+    const result = await db.delete(sessionsTable).where(eq(sessionsTable.id, id));
+    return result.rowCount > 0;
+  },
+});
+```
+
+The `DrizzleSessionRow` and `DrizzleSessionAdapter` types are exported for reference when defining a table schema and adapter. See the JSDoc on `DrizzleSessionRow` for example PostgreSQL and SQLite table definitions.
 
 Custom storage backends (databases, cloud storage, key-value stores) can be built by implementing the `SessionStore` interface. The [extensibility guide](EXTENSIBILITY.md) covers the interface, implementation notes, and includes a full example.
 

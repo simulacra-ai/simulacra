@@ -1,7 +1,7 @@
 {
   "name": "@simulacra-ai/session",
-  "version": "0.0.4",
-  "description": "Session persistence for the Simulacra conversation engine with pluggable file and in-memory storage",
+  "version": "0.0.5",
+  "description": "Session persistence for the Simulacra conversation engine with pluggable file, in-memory, and database storage",
   "type": "module",
   "exports": {
     ".": {
@@ -26,7 +26,7 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts --reporter=verbose"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.4"
+    "@simulacra-ai/core": "0.0.5"
   },
   "devDependencies": {
     "@simulacra-ai/core": "*",
@@ -44,7 +44,9 @@
   "keywords": [
     "ai",
     "llm",
-    "agent"
+    "agent",
+    "session",
+    "simulacra"
   ],
   "license": "MIT"
 }

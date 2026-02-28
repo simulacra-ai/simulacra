@@ -1,7 +1,4 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { readFileSync, writeFileSync, copyFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 
 import type {
   AssistantContent,
@@ -39,20 +36,9 @@ export interface AnthropicProviderConfig extends Record<string, unknown> {
     /** Whether to cache the tool definitions. */
     toolkit?: boolean;
   };
-  /** Use Claude Code's stored OAuth credentials for authentication. When true, the provider reads tokens from Claude Code's credentials file and refreshes them automatically. */
-  claude_code_auth?: boolean;
+  /** Custom request options passed to every SDK call. Accepts a static object or a function that returns (or resolves to) request options. Useful for injecting custom authentication headers or other per-request configuration. */
+  request_options?: Anthropic.RequestOptions | (() => Anthropic.RequestOptions | Promise<Anthropic.RequestOptions>);
 }
-
-interface ClaudeCodeOAuth {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-  [key: string]: unknown;
-}
-
-let claude_oauth: ClaudeCodeOAuth | null = null;
-let claude_creds_path: string | null = null;
-let claude_request_options_promise: Promise<Anthropic.RequestOptions> | null = null;
 
 /**
  * Model provider implementation for Anthropic's Claude models.
@@ -101,7 +87,7 @@ export class AnthropicProvider implements ModelProvider {
       max_tokens,
       thinking,
       prompt_caching,
-      claude_code_auth: _,
+      request_options,
       ...api_extras
     } = this.#config;
     const cache_system = prompt_caching?.system_prompt !== false;
@@ -140,9 +126,13 @@ export class AnthropicProvider implements ModelProvider {
     receiver.before_request({ params });
     receiver.request_raw(params);
 
+    const resolved_options = typeof request_options === "function"
+      ? await request_options()
+      : request_options;
+
     const response = await this.#sdk.messages.create(
       params,
-      this.#config.claude_code_auth ? await ensure_claude_request_options() : undefined,
+      resolved_options,
     );
 
     // Intentionally not awaited. Streaming is event-driven through the receiver.
@@ -524,103 +514,3 @@ function to_anthropic_content(content: Readonly<Content>) {
   }
 }
 
-function ensure_claude_request_options(): Promise<Anthropic.RequestOptions> {
-  if (!claude_oauth || !claude_creds_path) {
-    const { path: credsPath, oauth } = read_claude_credentials();
-    claude_oauth = oauth;
-    claude_creds_path = credsPath;
-  }
-  if (!claude_request_options_promise) {
-    claude_request_options_promise = refresh_claude_token(claude_creds_path, claude_oauth)
-      .then(
-        (token) =>
-          ({
-            headers: {
-              "x-api-key": null,
-              authorization: `Bearer ${token}`,
-              "anthropic-beta": "oauth-2025-04-20",
-            },
-          }) as Anthropic.RequestOptions,
-      )
-      .finally(() => {
-        claude_request_options_promise = null;
-      });
-  }
-  return claude_request_options_promise;
-}
-
-function get_claude_config_dir(): string {
-  return process.env["CLAUDE_CONFIG_DIR"] || join(homedir(), ".claude");
-}
-
-function read_claude_credentials(): { path: string; oauth: ClaudeCodeOAuth } {
-  const configDir = get_claude_config_dir();
-  const credsPath = join(configDir, ".credentials.json");
-
-  let raw: string;
-  try {
-    raw = readFileSync(credsPath, "utf8");
-  } catch (e) {
-    throw new Error(
-      `Could not read Claude Code credentials at ${credsPath}. ` +
-        `Make sure Claude Code is installed and authenticated. ` +
-        `(${(e as Error).message})`,
-    );
-  }
-
-  let creds: Record<string, unknown>;
-  try {
-    creds = JSON.parse(raw);
-  } catch (e) {
-    throw new Error(
-      `Invalid JSON in Claude Code credentials at ${credsPath}. (${(e as Error).message})`,
-    );
-  }
-  if (!creds.claudeAiOauth) {
-    throw new Error(`No OAuth credentials found in ${credsPath}.`);
-  }
-
-  return { path: credsPath, oauth: creds.claudeAiOauth as ClaudeCodeOAuth };
-}
-
-async function refresh_claude_token(credsPath: string, oauth: ClaudeCodeOAuth): Promise<string> {
-  if (oauth.expiresAt > Date.now() + 60_000) {
-    return oauth.accessToken;
-  }
-
-  const res = await fetch("https://api.anthropic.com/v1/oauth/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "refresh_token",
-      refresh_token: oauth.refreshToken,
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Claude Code OAuth token refresh failed (${res.status}): ${body}`);
-  }
-
-  const data = (await res.json()) as {
-    access_token: string;
-    refresh_token?: string;
-    expires_in: number;
-  };
-
-  // Update in-memory state first so the token is usable even if file ops fail
-  oauth.accessToken = data.access_token;
-  oauth.refreshToken = data.refresh_token || oauth.refreshToken;
-  oauth.expiresAt = Date.now() + data.expires_in * 1000;
-
-  try {
-    copyFileSync(credsPath, `${credsPath}.${Date.now()}.bak`);
-    const creds = JSON.parse(readFileSync(credsPath, "utf8"));
-    creds.claudeAiOauth = { ...oauth };
-    writeFileSync(credsPath, JSON.stringify(creds, null, 2));
-  } catch {
-    // File persistence is best-effort; in-memory state is already updated
-  }
-
-  return data.access_token;
-}

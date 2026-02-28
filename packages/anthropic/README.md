@@ -28,7 +28,7 @@ interface AnthropicProviderConfig {
   max_tokens?: number;
   thinking?: { enable: boolean; budget_tokens?: number };
   prompt_caching?: { system_prompt?: boolean; toolkit?: boolean };
-  claude_code_auth?: boolean;
+  request_options?: Anthropic.RequestOptions | (() => Anthropic.RequestOptions | Promise<Anthropic.RequestOptions>);
 }
 ```
 
@@ -36,18 +36,22 @@ Additional properties (`temperature`, `top_p`, etc.) spread into the API request
 
 If `max_tokens` is not set, it defaults to 8192.
 
-## Claude Code Auth
+## Request Options
 
-When Claude Code is installed and authenticated, its stored credentials can be used instead of managing API keys. Setting `claude_code_auth: true` causes the provider to use tokens from Claude Code's stored credentials, automatically managing token lifetime and renewal.
+The `request_options` field passes custom options to every Anthropic SDK call. It accepts a static `Anthropic.RequestOptions` object or a function that returns one (synchronously or as a promise). A function is useful when options need to be computed at request time, for example to resolve a fresh OAuth token.
 
 ```typescript
 const provider = new AnthropicProvider(new Anthropic(), {
   model,
-  claude_code_auth: true,
+  request_options: async () => ({
+    headers: {
+      "x-api-key": null,
+      "authorization": `Bearer ${await get_oauth_token()}`, // don't use a Claude Code token here, doing so is against the Anthropic TOS
+      "anthropic-beta": "oauth-2025-04-20",
+    },
+  }),
 });
 ```
-
-Claude Code auth is well-suited for local development and personal tooling where a Claude subscription is already active. Production systems should use API key authentication.
 
 ## Extended Thinking
 

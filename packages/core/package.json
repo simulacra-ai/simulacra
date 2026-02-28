@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/core",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Multi-provider agentic conversation engine: core types, conversation base class, workflows, policies, and context transformers",
   "type": "module",
   "exports": {

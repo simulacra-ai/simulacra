@@ -1,12 +1,18 @@
 {
   "name": "@simulacra-ai/orchestration",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Subagent, background, and parallel workflow orchestration for the Simulacra conversation engine",
   "type": "module",
   "exports": {
     ".": {
-      "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" },
-      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
     }
   },
   "files": [
@@ -17,7 +23,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.3"
+    "@simulacra-ai/core": "0.0.4"
   },
   "repository": {
     "type": "git",

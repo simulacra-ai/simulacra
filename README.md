@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/v/@simulacra-ai/core)](https://www.npmjs.com/package/@simulacra-ai/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Simulacra is a TypeScript toolkit for building AI agents on top of stateful, multi-turn conversations. It is built around the `Conversation`, an ongoing dialogue with a model that holds message history, streams responses, executes tool calls, and drives the agentic loop. Messages are stored in a normalized format, so conversations can be serialized and resumed across different models. Adapter packages are available for [Anthropic](packages/anthropic), [OpenAI](packages/openai), and [Google](packages/google), and the extensibility model makes it straightforward to add others.
+Simulacra is a TypeScript toolkit for building AI agents on top of stateful, multi-turn conversations. It is built around the `Conversation`, an ongoing dialogue with a model that holds message history, streams responses, executes tool calls, and drives the agentic loop. Messages are stored in a normalized format, so conversations can be serialized and resumed across different models. Adapter packages are available for [Anthropic](packages/anthropic), [OpenAI](packages/openai), [Google](packages/google), and [FireworksAI](packages/fireworksai), and the extensibility model makes it straightforward to add others.
 
 Tool use is supported out of the box, giving an AI model the ability to take actions or retrieve information. A workflow engine builds on top of the conversation to drive the agentic loop by executing tools and returning the results to the model until it produces a final response.
 
@@ -131,7 +131,7 @@ await conversation.prompt("Analyze this dataset and report your findings. Delega
 
 ## Sessions
 
-The [session package](packages/session) manages and persists conversation data. A session is a conversation state that can be saved and resumed over time. Sessions are managed via the `SessionManager`, and the storage mechanism underlying it can be customized. Filesystem and in-memory stores are included out of the box.
+The [session package](packages/session) manages and persists conversation data. A session is a conversation state that can be saved and resumed over time. Sessions are managed via the `SessionManager`, and the storage mechanism underlying it can be customized. Filesystem, in-memory, and Drizzle stores are included out of the box.
 
 ```typescript
 import { SessionManager, FileSessionStore } from "@simulacra-ai/session";
@@ -158,6 +158,7 @@ Package|Description
 [`@simulacra-ai/anthropic`](packages/anthropic)|Anthropic Claude provider
 [`@simulacra-ai/openai`](packages/openai)|OpenAI provider
 [`@simulacra-ai/google`](packages/google)|Google Gemini provider
+[`@simulacra-ai/fireworksai`](packages/fireworksai)|FireworksAI provider
 [`@simulacra-ai/mcp`](packages/mcp)|MCP client bridge
 [`@simulacra-ai/session`](packages/session)|Session persistence and forking
 [`@simulacra-ai/orchestration`](packages/orchestration)|Multi-agent execution patterns

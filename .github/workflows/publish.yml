@@ -1,24 +1,73 @@
 name: Publish to npm
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["Version Bump"]
+    types:
+      - completed
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
+      - name: Verify version was bumped
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "$VERSION" = "0.0.0" ] || [ -z "$VERSION" ]; then
+            echo "::error::Checked out version is $VERSION, version bump may not have landed yet"
+            exit 1
+          fi
+          echo "Publishing version $VERSION"
+
       - run: npm ci
       - run: npm run build
 
-      - run: npm publish --workspaces --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish core first
+        run: |
+          set -o pipefail
+          if ! npm publish -w packages/core --access public 2>&1 | tee /tmp/publish-out; then
+            if grep -qE "EPUBLISHCONFLICT|E403|You cannot publish over" /tmp/publish-out; then
+              echo "Already published, skipping core"
+            else
+              echo "::error::Failed to publish core"
+              exit 1
+            fi
+          fi
+
+      - name: Publish remaining packages
+        run: |
+          set -o pipefail
+          FAILED=0
+          for pkg in packages/*/; do
+            [ "$pkg" = "packages/core/" ] && continue
+            if [ ! -f "$pkg/package.json" ]; then
+              echo "No package.json in $pkg, skipping"
+              continue
+            fi
+            if ! npm publish -w "$pkg" --access public 2>&1 | tee /tmp/publish-out; then
+              if grep -qE "EPUBLISHCONFLICT|E403|You cannot publish over" /tmp/publish-out; then
+                echo "Already published, skipping $pkg"
+              else
+                echo "::error::Failed to publish $pkg"
+                FAILED=1
+              fi
+            fi
+          done
+          exit $FAILED

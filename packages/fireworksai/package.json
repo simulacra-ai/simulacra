@@ -1,7 +1,7 @@
 {
-  "name": "@simulacra-ai/session",
+  "name": "@simulacra-ai/fireworksai",
   "version": "0.0.4",
-  "description": "Session persistence for the Simulacra conversation engine with pluggable file and in-memory storage",
+  "description": "FireworksAI provider for the Simulacra conversation engine",
   "type": "module",
   "exports": {
     ".": {
@@ -26,24 +26,25 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts --reporter=verbose"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.4"
+    "@simulacra-ai/core": "0.0.4",
+    "openai": ">=4.0.0 <7.0.0"
   },
   "devDependencies": {
     "@simulacra-ai/core": "*",
-    "@types/better-sqlite3": "^7.6.12",
-    "better-sqlite3": "^11.8.1",
-    "drizzle-orm": "^0.39.3",
+    "openai": "^4.0.0",
     "vitest": "^3.0.0"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/simulacra-ai/simulacra.git",
-    "directory": "packages/session"
+    "directory": "packages/fireworksai"
   },
   "homepage": "https://github.com/simulacra-ai/simulacra",
   "keywords": [
     "ai",
     "llm",
+    "fireworks",
+    "fireworksai",
     "agent"
   ],
   "license": "MIT"

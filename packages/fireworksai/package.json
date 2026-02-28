@@ -1,0 +1,51 @@
+{
+  "name": "@simulacra-ai/fireworksai",
+  "version": "0.0.4",
+  "description": "FireworksAI provider for the Simulacra conversation engine",
+  "type": "module",
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "vitest run --reporter=verbose src/__tests__/e2e.test.ts"
+  },
+  "peerDependencies": {
+    "@simulacra-ai/core": "0.0.4",
+    "openai": ">=4.0.0 <7.0.0"
+  },
+  "devDependencies": {
+    "@simulacra-ai/core": "*",
+    "openai": "^4.0.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/simulacra-ai/simulacra.git",
+    "directory": "packages/fireworksai"
+  },
+  "homepage": "https://github.com/simulacra-ai/simulacra",
+  "keywords": [
+    "ai",
+    "llm",
+    "fireworks",
+    "fireworksai",
+    "agent"
+  ],
+  "license": "MIT"
+}

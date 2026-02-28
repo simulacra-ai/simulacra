@@ -8,3 +8,8 @@ export type {
 export { SessionManager } from "./session-manager.ts";
 export { FileSessionStore } from "./file-session-store.ts";
 export { InMemorySessionStore } from "./in-memory-session-store.ts";
+export {
+  DrizzleSessionStore,
+  type DrizzleSessionAdapter,
+  type DrizzleSessionRow,
+} from "./drizzle-session-store.ts";

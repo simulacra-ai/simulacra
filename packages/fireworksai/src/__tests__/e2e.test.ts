@@ -8,7 +8,8 @@
  * To run locally:
  *   FIREWORKS_API_KEY=your_key npm run test:e2e -w packages/fireworksai
  */
-import type { CancellationToken, Message, ModelRequest, StreamReceiver } from "@simulacra-ai/core";
+import { CancellationToken } from "@simulacra-ai/core";
+import type { Message, ModelRequest, StreamReceiver } from "@simulacra-ai/core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -19,8 +20,12 @@ import {
 
 const API_KEY = process.env.FIREWORKS_API_KEY;
 
-// Default model – a fast, cheap model suitable for testing
-const TEST_MODEL = "accounts/fireworks/models/llama-v3p1-8b-instruct";
+// Override with FIREWORKS_TEST_MODEL env var to use a different model.
+// Defaults to minimax-m2p1 — a reliable, low-cost non-reasoning model that supports tool use.
+// Note: reasoning models like gpt-oss-20b may emit synthetic tokens (e.g. <|constrain|>json)
+// as tool names and therefore fail tool-use assertions.
+const TEST_MODEL =
+  process.env.FIREWORKS_TEST_MODEL ?? "accounts/fireworks/models/minimax-m2p1";
 
 // ---------------------------------------------------------------------------
 // Helper: collect all events from a provider request
@@ -40,7 +45,7 @@ async function run_request(
 ): Promise<CollectedEvents> {
   const sdk = createFireworksAIClient(API_KEY as string);
   const provider = new FireworksAIProvider(sdk, config);
-  const cancel: CancellationToken = { is_cancellation_requested: false };
+  const cancel = CancellationToken.empty();
 
   const collected: CollectedEvents = {
     start_messages: [],
@@ -50,29 +55,41 @@ async function run_request(
     errors: [],
   };
 
+  // Resolves when streaming completes (complete_message or error callback fires).
+  let resolve_done!: () => void;
+  const done = new Promise<void>((r) => {
+    resolve_done = r;
+  });
+
   const receiver: StreamReceiver = {
     start_message: (e) => collected.start_messages.push(e),
     update_message: () => {},
-    complete_message: (e) =>
+    complete_message: (e) => {
       collected.complete_messages.push({
         message: e.message as Message,
         stop_reason: e.stop_reason,
         usage: e.usage,
-      }),
+      });
+      resolve_done();
+    },
     start_content: (e) => collected.content_starts.push(e),
     update_content: () => {},
     complete_content: (e) => collected.content_completes.push(e),
-    error: (err) => collected.errors.push(err),
+    error: (err) => {
+      collected.errors.push(err);
+      resolve_done();
+    },
     before_request: () => {},
     request_raw: () => {},
     response_raw: () => {},
     stream_raw: () => {},
-    cancel: () => {},
+    cancel: () => {
+      resolve_done();
+    },
   };
 
   await provider.execute_request(request, receiver, cancel);
-  // Wait for async streaming to fully finish
-  await new Promise((r) => setTimeout(r, 5000));
+  await done;
 
   return collected;
 }
@@ -89,7 +106,8 @@ describe.skipIf(!API_KEY)("FireworksAI E2E – simple conversation", () => {
       system: "You are a helpful assistant. Follow instructions precisely.",
     };
 
-    const events = await run_request({ model: TEST_MODEL, max_tokens: 64 }, request);
+    // High enough for any model: reasoning models need budget for CoT, standard models finish early
+    const events = await run_request({ model: TEST_MODEL, max_tokens: 512 }, request);
 
     expect(events.errors).toHaveLength(0);
     expect(events.complete_messages).toHaveLength(1);
@@ -156,7 +174,8 @@ describe.skipIf(!API_KEY)("FireworksAI E2E – multi-turn conversation", () => {
     ];
 
     const request: ModelRequest = { messages, tools: [] };
-    const events = await run_request({ model: TEST_MODEL, max_tokens: 32 }, request);
+    // High enough for any model: reasoning models need budget for CoT, standard models finish early
+    const events = await run_request({ model: TEST_MODEL, max_tokens: 512 }, request);
 
     expect(events.errors).toHaveLength(0);
     const { message } = events.complete_messages[0];
@@ -172,13 +191,18 @@ describe.skipIf(!API_KEY)("FireworksAI E2E – tool use", () => {
       messages: [
         {
           role: "user",
-          content: [{ type: "text", text: "What is the current weather in San Francisco?" }],
+          content: [
+            {
+              type: "text",
+              text: "Use the get_weather tool to look up the weather in San Francisco right now.",
+            },
+          ],
         },
       ],
       tools: [
         {
           name: "get_weather",
-          description: "Get the current weather for a given city.",
+          description: "Get the current weather for a given city. Always call this tool when the user asks about weather.",
           parameters: [
             {
               name: "city",
@@ -189,9 +213,10 @@ describe.skipIf(!API_KEY)("FireworksAI E2E – tool use", () => {
           ],
         },
       ],
+      system: "You are a helpful assistant. When the user asks about weather, you MUST use the get_weather tool. Do not answer from memory.",
     };
 
-    const events = await run_request({ model: TEST_MODEL, max_tokens: 256 }, request);
+    const events = await run_request({ model: TEST_MODEL, max_tokens: 512 }, request);
 
     expect(events.errors).toHaveLength(0);
     expect(events.complete_messages).toHaveLength(1);
@@ -231,7 +256,8 @@ describe.skipIf(!API_KEY)("FireworksAI E2E – tool use", () => {
             type: "tool_result",
             tool: "get_weather",
             tool_request_id: "call_weather_paris",
-            result: { result: true, temperature: "18°C", condition: "partly cloudy" },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            result: { result: true, temperature: "18°C", condition: "partly cloudy" } as any,
           },
         ],
       },
@@ -248,7 +274,7 @@ describe.skipIf(!API_KEY)("FireworksAI E2E – tool use", () => {
       ],
     };
 
-    const events = await run_request({ model: TEST_MODEL, max_tokens: 256 }, request);
+    const events = await run_request({ model: TEST_MODEL, max_tokens: 512 }, request);
 
     expect(events.errors).toHaveLength(0);
     const { message, stop_reason } = events.complete_messages[0];
@@ -266,7 +292,8 @@ describe.skipIf(!API_KEY)("FireworksAI E2E – streaming events", () => {
       tools: [],
     };
 
-    const events = await run_request({ model: TEST_MODEL, max_tokens: 32 }, request);
+    // High enough for any model: reasoning models need budget for CoT, standard models finish early
+    const events = await run_request({ model: TEST_MODEL, max_tokens: 512 }, request);
 
     expect(events.errors).toHaveLength(0);
     expect(events.content_starts.length).toBeGreaterThan(0);

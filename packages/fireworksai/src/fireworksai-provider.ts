@@ -24,7 +24,7 @@ export const FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1";
 /**
  * Configuration options for the FireworksAI provider.
  */
-export interface FireworksAIProviderConfig extends Record<string, unknown> {
+export type FireworksAIProviderConfig = Record<string, unknown> & {
   /** The model identifier to use (e.g., "accounts/fireworks/models/llama-v3p1-8b-instruct"). */
   model: string;
   /** The maximum number of tokens to generate in the response. */
@@ -326,7 +326,6 @@ function to_fireworksai_tool(tool: ToolDefinition): OpenAI.Chat.ChatCompletionTo
           tool.parameters.map(({ name, ...parameter }) => [name, parameter]),
         ),
       }),
-      strict: true,
     },
   };
 }
@@ -604,6 +603,12 @@ function to_fireworksai_assistant_message(message: AssistantMessage) {
       default:
         throw new Error("unexpected content type");
     }
+  }
+  // Some OpenAI-compatible backends (e.g. Mixtral via Fireworks Jinja templates) require
+  // the `content` key to be present on assistant messages even when it is null. The OpenAI
+  // API accepts a missing key, but other backends reject it with a 400 template error.
+  if (result.tool_calls && result.content === undefined) {
+    result.content = null;
   }
   return result;
 }

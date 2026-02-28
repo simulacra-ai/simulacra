@@ -1,13 +1,8 @@
 import type { OpenAI } from "openai";
 import { describe, expect, it, vi } from "vitest";
 
-import type {
-  CancellationToken,
-  Message,
-  ModelRequest,
-  StreamReceiver,
-  ToolDefinition,
-} from "@simulacra-ai/core";
+import type { Message, ModelRequest, StreamReceiver, ToolDefinition } from "@simulacra-ai/core";
+import { CancellationToken, CancellationTokenSource } from "@simulacra-ai/core";
 
 import {
   FIREWORKS_BASE_URL,
@@ -82,7 +77,7 @@ function make_receiver(): StreamReceiver & { calls: Record<string, unknown[][]> 
   };
 }
 
-const no_cancel: CancellationToken = { is_cancellation_requested: false };
+const no_cancel = CancellationToken.empty();
 
 // ---------------------------------------------------------------------------
 // createFireworksAIClient
@@ -429,7 +424,9 @@ describe("FireworksAIProvider – tool call streaming", () => {
 
 describe("FireworksAIProvider – cancellation", () => {
   it("calls receiver.cancel() when cancellation is requested", async () => {
-    const cancel_token: CancellationToken = { is_cancellation_requested: true };
+    const source = new CancellationTokenSource();
+    const cancel_token = source.token;
+    source.cancel();
 
     const stream = async_stream(
       make_chunk({ choices: [make_choice(0, { role: "assistant", content: "hello" }, null)] }),

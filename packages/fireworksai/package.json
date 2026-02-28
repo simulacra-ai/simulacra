@@ -23,7 +23,7 @@
     "clean": "rm -rf dist *.tsbuildinfo",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "vitest run --reporter=verbose src/__tests__/e2e.test.ts"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts --reporter=verbose"
   },
   "peerDependencies": {
     "@simulacra-ai/core": "0.0.4",

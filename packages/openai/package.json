@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/openai",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "OpenAI provider for the Simulacra conversation engine",
   "type": "module",
   "exports": {
@@ -25,7 +25,7 @@
     "test:watch": "vitest"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.5",
+    "@simulacra-ai/core": "0.0.6",
     "openai": ">=4.0.0 <7.0.0"
   },
   "devDependencies": {

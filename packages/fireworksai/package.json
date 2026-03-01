@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/fireworksai",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "FireworksAI provider for the Simulacra conversation engine",
   "type": "module",
   "exports": {
@@ -26,7 +26,7 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts --reporter=verbose"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.5",
+    "@simulacra-ai/core": "0.0.6",
     "openai": ">=4.0.0 <7.0.0"
   },
   "devDependencies": {

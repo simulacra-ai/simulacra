@@ -288,7 +288,7 @@ function from_gemini_part(part: gemini.Part) {
       thought: part.text ?? "",
     };
   }
-  if (part.text) {
+  if ("text" in part) {
     return {
       type: "text",
       text: part.text ?? "",
@@ -452,7 +452,6 @@ function map_stop_reason(
           stop_reason: "error",
           stop_details: finishMessage,
         };
-      case gemini.FinishReason.FINISH_REASON_UNSPECIFIED:
       case gemini.FinishReason.SAFETY:
       case gemini.FinishReason.RECITATION:
       case gemini.FinishReason.LANGUAGE:
@@ -460,6 +459,11 @@ function map_stop_reason(
       case gemini.FinishReason.PROHIBITED_CONTENT:
       case gemini.FinishReason.SPII:
       case gemini.FinishReason.IMAGE_SAFETY:
+        return {
+          stop_reason: "error",
+          stop_details: finishMessage,
+        };
+      case gemini.FinishReason.FINISH_REASON_UNSPECIFIED:
     }
   }
   return {

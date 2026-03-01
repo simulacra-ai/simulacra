@@ -26,8 +26,8 @@ export function has_data(obj: Record<string, unknown>) {
  * @returns The value if non-empty, otherwise undefined.
  */
 export function undefined_if_empty<T = unknown>(obj: T) {
-  if (!obj) {
-    return obj;
+  if (obj === null || obj === undefined) {
+    return undefined;
   }
   if (Array.isArray(obj)) {
     return obj.length === 0 ? undefined : obj;

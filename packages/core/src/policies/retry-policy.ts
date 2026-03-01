@@ -1,4 +1,4 @@
-import { CancellationToken, sleep } from "../utils/async.ts";
+import { CancellationToken, OperationCanceledError, sleep } from "../utils/async.ts";
 import { Policy, PolicyErrorResult, PolicyResult } from "./types.ts";
 
 /**
@@ -33,6 +33,10 @@ const RETRYABLE_HTTP_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504, 529])
 export function defaultRetryable(result: PolicyErrorResult): boolean {
   const error = result.error;
 
+  if (error instanceof OperationCanceledError) {
+    return false;
+  }
+
   if (error !== null && error !== undefined && typeof error === "object" && "status" in error) {
     const status = (error as { status: unknown }).status;
     if (typeof status === "number") {
@@ -62,7 +66,7 @@ export function defaultRetryable(result: PolicyErrorResult): boolean {
       msg.includes("econnrefused") ||
       msg.includes("socket hang up") ||
       msg.includes("network error") ||
-      msg.includes("fetch failed")
+      msg.includes("fail")
     ) {
       return true;
     }
@@ -124,6 +128,7 @@ export class RetryPolicy<_TResult> extends Policy {
           metadata,
         };
       } catch (error) {
+        cancellation_token.throw_if_cancellation_requested();
         metadata.attempts = attempt;
 
         const result: PolicyErrorResult = {

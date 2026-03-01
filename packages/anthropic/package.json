@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/anthropic",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Anthropic Claude provider for the Simulacra conversation engine",
   "type": "module",
   "exports": {
@@ -25,7 +25,7 @@
     "test:watch": "vitest"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.6",
+    "@simulacra-ai/core": "0.0.7",
     "@anthropic-ai/sdk": ">=0.30.0 <1.0.0"
   },
   "devDependencies": {

@@ -37,7 +37,9 @@ export interface AnthropicProviderConfig extends Record<string, unknown> {
     toolkit?: boolean;
   };
   /** Custom request options passed to every SDK call. Accepts a static object or a function that returns (or resolves to) request options. Useful for injecting custom authentication headers or other per-request configuration. */
-  request_options?: Anthropic.RequestOptions | (() => Anthropic.RequestOptions | Promise<Anthropic.RequestOptions>);
+  request_options?:
+    | Anthropic.RequestOptions
+    | (() => Anthropic.RequestOptions | Promise<Anthropic.RequestOptions>);
 }
 
 /**
@@ -82,14 +84,8 @@ export class AnthropicProvider implements ModelProvider {
     receiver: StreamReceiver,
     cancellation: CancellationToken,
   ): Promise<void> {
-    const {
-      model,
-      max_tokens,
-      thinking,
-      prompt_caching,
-      request_options,
-      ...api_extras
-    } = this.#config;
+    const { model, max_tokens, thinking, prompt_caching, request_options, ...api_extras } =
+      this.#config;
     const cache_system = prompt_caching?.system_prompt !== false;
     const cache_tools = prompt_caching?.toolkit !== false;
 
@@ -126,14 +122,10 @@ export class AnthropicProvider implements ModelProvider {
     receiver.before_request({ params });
     receiver.request_raw(params);
 
-    const resolved_options = typeof request_options === "function"
-      ? await request_options()
-      : request_options;
+    const resolved_options =
+      typeof request_options === "function" ? await request_options() : request_options;
 
-    const response = await this.#sdk.messages.create(
-      params,
-      resolved_options,
-    );
+    const response = await this.#sdk.messages.create(params, resolved_options);
 
     // Intentionally not awaited. Streaming is event-driven through the receiver.
     // The policy wraps only connection establishment; chunk processing flows
@@ -513,4 +505,3 @@ function to_anthropic_content(content: Readonly<Content>) {
       throw new Error("unexpected content type");
   }
 }
-

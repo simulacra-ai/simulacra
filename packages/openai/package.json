@@ -20,11 +20,16 @@
   ],
   "scripts": {
     "build": "tsup",
-    "clean": "rm -rf dist *.tsbuildinfo"
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "peerDependencies": {
     "@simulacra-ai/core": "0.0.5",
     "openai": ">=4.0.0 <7.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
   },
   "repository": {
     "type": "git",

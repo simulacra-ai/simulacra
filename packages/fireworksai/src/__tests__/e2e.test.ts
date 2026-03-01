@@ -24,8 +24,7 @@ const API_KEY = process.env.FIREWORKS_API_KEY;
 // Defaults to minimax-m2p1 — a reliable, low-cost non-reasoning model that supports tool use.
 // Note: reasoning models like gpt-oss-20b may emit synthetic tokens (e.g. <|constrain|>json)
 // as tool names and therefore fail tool-use assertions.
-const TEST_MODEL =
-  process.env.FIREWORKS_TEST_MODEL ?? "accounts/fireworks/models/minimax-m2p1";
+const TEST_MODEL = process.env.FIREWORKS_TEST_MODEL ?? "accounts/fireworks/models/minimax-m2p1";
 
 // ---------------------------------------------------------------------------
 // Helper: collect all events from a provider request
@@ -202,7 +201,8 @@ describe.skipIf(!API_KEY)("FireworksAI E2E – tool use", () => {
       tools: [
         {
           name: "get_weather",
-          description: "Get the current weather for a given city. Always call this tool when the user asks about weather.",
+          description:
+            "Get the current weather for a given city. Always call this tool when the user asks about weather.",
           parameters: [
             {
               name: "city",
@@ -213,7 +213,8 @@ describe.skipIf(!API_KEY)("FireworksAI E2E – tool use", () => {
           ],
         },
       ],
-      system: "You are a helpful assistant. When the user asks about weather, you MUST use the get_weather tool. Do not answer from memory.",
+      system:
+        "You are a helpful assistant. When the user asks about weather, you MUST use the get_weather tool. Do not answer from memory.",
     };
 
     const events = await run_request({ model: TEST_MODEL, max_tokens: 512 }, request);

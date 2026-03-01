@@ -108,11 +108,11 @@ describe("DrizzleSessionStore (SQLite) – basic CRUD", () => {
 
     const result = await store.load("session-1");
     expect(result).toBeDefined();
-    expect(result!.metadata.id).toBe("session-1");
-    expect(result!.metadata.label).toBe("My chat");
-    expect(result!.metadata.provider).toBe("anthropic");
-    expect(result!.metadata.message_count).toBe(2);
-    expect(result!.messages).toEqual(messages);
+    expect(result?.metadata.id).toBe("session-1");
+    expect(result?.metadata.label).toBe("My chat");
+    expect(result?.metadata.provider).toBe("anthropic");
+    expect(result?.metadata.message_count).toBe(2);
+    expect(result?.messages).toEqual(messages);
   });
 
   it("returns undefined when loading a session that does not exist", async () => {
@@ -128,8 +128,8 @@ describe("DrizzleSessionStore (SQLite) – basic CRUD", () => {
     await store.save("s", messages_v2);
 
     const result = await store.load("s");
-    expect(result!.messages).toEqual(messages_v2);
-    expect(result!.metadata.message_count).toBe(2);
+    expect(result?.messages).toEqual(messages_v2);
+    expect(result?.metadata.message_count).toBe(2);
   });
 
   it("deletes an existing session and returns true", async () => {
@@ -154,7 +154,8 @@ describe("DrizzleSessionStore (SQLite) – metadata preservation", () => {
   it("preserves created_at across updates", async () => {
     await store.save("s", [], { label: "first" });
     const first = await store.load("s");
-    const original_created_at = first!.metadata.created_at;
+    expect(first).toBeDefined();
+    const original_created_at = first?.metadata.created_at as string;
 
     // Small delay to ensure updated_at differs
     await new Promise((r) => setTimeout(r, 5));
@@ -162,8 +163,8 @@ describe("DrizzleSessionStore (SQLite) – metadata preservation", () => {
     await store.save("s", [make_message("new message")]);
     const second = await store.load("s");
 
-    expect(second!.metadata.created_at).toBe(original_created_at);
-    expect(second!.metadata.updated_at > original_created_at).toBe(true);
+    expect(second?.metadata.created_at).toBe(original_created_at);
+    expect((second?.metadata.updated_at ?? "") > original_created_at).toBe(true);
   });
 
   it("merges partial metadata without losing existing fields", async () => {
@@ -171,9 +172,9 @@ describe("DrizzleSessionStore (SQLite) – metadata preservation", () => {
     await store.save("s", [make_message("hi")], { label: "Updated" });
 
     const result = await store.load("s");
-    expect(result!.metadata.provider).toBe("anthropic");
-    expect(result!.metadata.model).toBe("claude-3");
-    expect(result!.metadata.label).toBe("Updated");
+    expect(result?.metadata.provider).toBe("anthropic");
+    expect(result?.metadata.model).toBe("claude-3");
+    expect(result?.metadata.label).toBe("Updated");
   });
 
   it("stores optional fields like parent_id and fork_message_id", async () => {
@@ -184,9 +185,9 @@ describe("DrizzleSessionStore (SQLite) – metadata preservation", () => {
     });
 
     const result = await store.load("child");
-    expect(result!.metadata.parent_id).toBe("parent-session");
-    expect(result!.metadata.fork_message_id).toBe("msg-42");
-    expect(result!.metadata.detached).toBe(false);
+    expect(result?.metadata.parent_id).toBe("parent-session");
+    expect(result?.metadata.fork_message_id).toBe("msg-42");
+    expect(result?.metadata.detached).toBe(false);
   });
 
   it("stores checkpoint_state as JSON", async () => {
@@ -197,7 +198,7 @@ describe("DrizzleSessionStore (SQLite) – metadata preservation", () => {
     await store.save("s", [], { checkpoint_state: checkpoint as never });
 
     const result = await store.load("s");
-    expect(result!.metadata.checkpoint_state).toEqual(checkpoint);
+    expect(result?.metadata.checkpoint_state).toEqual(checkpoint);
   });
 });
 
@@ -273,13 +274,13 @@ describe("DrizzleSessionStore (SQLite) – message integrity", () => {
 
     await store.save("s", messages);
     const result = await store.load("s");
-    expect(result!.messages).toEqual(messages);
+    expect(result?.messages).toEqual(messages);
   });
 
   it("stores an empty messages array correctly", async () => {
     await store.save("s", []);
     const result = await store.load("s");
-    expect(result!.messages).toEqual([]);
-    expect(result!.metadata.message_count).toBe(0);
+    expect(result?.messages).toEqual([]);
+    expect(result?.metadata.message_count).toBe(0);
   });
 });

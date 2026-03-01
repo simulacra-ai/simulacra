@@ -29,7 +29,7 @@ export type FireworksAIProviderConfig = Record<string, unknown> & {
   model: string;
   /** The maximum number of tokens to generate in the response. */
   max_tokens?: number;
-}
+};
 
 /**
  * Creates an OpenAI SDK client configured to target the FireworksAI API.

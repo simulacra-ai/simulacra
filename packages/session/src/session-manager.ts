@@ -382,7 +382,7 @@ export class SessionManager {
 
     const truncated = raw.slice(0, 60);
     const at_boundary = truncated.replace(/\s+\S*$/, "");
-    return (at_boundary || truncated).slice(0, 50);
+    return at_boundary || truncated;
   }
 
   #on_create_child = (child: Conversation) => {

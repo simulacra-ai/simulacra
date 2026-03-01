@@ -39,7 +39,7 @@ export type DrizzleSessionRow = {
   messages: unknown;
   /** ISO 8601 timestamp — denormalized from metadata for efficient ORDER BY. */
   updated_at: string;
-}
+};
 
 /**
  * Adapter interface that bridges `DrizzleSessionStore` with a drizzle database instance.
@@ -107,7 +107,7 @@ export type DrizzleSessionAdapter = {
    * @returns `true` if a row was deleted, `false` if no row with that id existed.
    */
   delete(id: string): Promise<boolean>;
-}
+};
 
 /**
  * A database-backed implementation of `SessionStore` powered by drizzle ORM.

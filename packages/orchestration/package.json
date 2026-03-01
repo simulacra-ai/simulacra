@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/orchestration",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Subagent, background, and parallel workflow orchestration for the Simulacra conversation engine",
   "type": "module",
   "exports": {
@@ -25,7 +25,7 @@
     "test:watch": "vitest"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.7"
+    "@simulacra-ai/core": "0.0.8"
   },
   "devDependencies": {
     "vitest": "^3.0.0"

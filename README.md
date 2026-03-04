@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/v/@simulacra-ai/core)](https://www.npmjs.com/package/@simulacra-ai/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Simulacra is a TypeScript toolkit for building AI agents on top of stateful, multi-turn conversations. It is built around the `Conversation`, an ongoing dialogue with a model that holds message history, streams responses, executes tool calls, and drives the agentic loop. Messages are stored in a normalized format, so conversations can be serialized and resumed across different models. Adapter packages are available for [Anthropic](packages/anthropic), [OpenAI](packages/openai), [Google](packages/google), and [FireworksAI](packages/fireworksai), and the extensibility model makes it straightforward to add others.
+Simulacra is a TypeScript toolkit for building AI agents on top of stateful, multi-turn conversations. It is built around the `Conversation`, an ongoing dialogue with a model that holds message history, streams responses, executes tool calls, and drives the agentic loop. Messages are stored in a normalized format, so conversations can be serialized and resumed across different models. Adapter packages are available for [Anthropic](packages/anthropic), [OpenAI](packages/openai), [Google](packages/google), [FireworksAI](packages/fireworksai), and [Cloudflare](packages/cloudflare), and the extensibility model makes it straightforward to add others.
 
 Tool use is supported out of the box, giving an AI model the ability to take actions or retrieve information. A workflow engine builds on top of the conversation to drive the agentic loop by executing tools and returning the results to the model until it produces a final response.
 
@@ -159,6 +159,7 @@ Package|Description
 [`@simulacra-ai/openai`](packages/openai)|OpenAI provider
 [`@simulacra-ai/google`](packages/google)|Google Gemini provider
 [`@simulacra-ai/fireworksai`](packages/fireworksai)|FireworksAI provider
+[`@simulacra-ai/cloudflare`](packages/cloudflare)|Cloudflare AI Gateway provider
 [`@simulacra-ai/mcp`](packages/mcp)|MCP client bridge
 [`@simulacra-ai/session`](packages/session)|Session persistence and forking
 [`@simulacra-ai/orchestration`](packages/orchestration)|Multi-agent execution patterns

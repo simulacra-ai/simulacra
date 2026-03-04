@@ -37,7 +37,14 @@ export type CloudflareGatewayConfig = {
   accountId: string;
   /** The name of your AI Gateway. */
   gatewayName: string;
-  /** The upstream provider to route through (e.g., "openai", "workers-ai"). Defaults to "openai". */
+  /**
+   * The upstream provider path segment. Different providers require different
+   * path suffixes for their OpenAI-compatible endpoints:
+   * - `"openai"` — OpenAI (default)
+   * - `"workers-ai/v1"` — Cloudflare Workers AI
+   * - `"google-ai-studio/v1beta/openai"` — Google AI Studio (Gemini)
+   * - `"azure-openai/{resource}/openai/deployments/{deployment}"` — Azure OpenAI
+   */
   provider?: string;
 };
 

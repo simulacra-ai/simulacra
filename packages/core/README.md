@@ -90,13 +90,29 @@ class WeatherTool {
 
 The workflow engine drives the tool call loop and enables agentic behaviors. The `WorkflowManager` sits on top of the conversation object, managing workflow state and executing tools on the model's behalf, running them in parallel when possible, and feeding results back until the model produces a final response.
 
-The workflow manager emits events throughout its lifecycle, making it possible to observe the full agentic loop.
+### Running a Workflow
+
+`manager.run()` sends a prompt and returns a promise that resolves when the full workflow completes, including all tool execution rounds.
 
 ```typescript
-// create a conversation and workflow manager
+using conversation = new Conversation(provider);
 using manager = new WorkflowManager(conversation);
 
-// log the final message when the workflow completes
+conversation.toolkit = [WeatherTool];
+
+const result = await manager.run("What's the weather in Tokyo?");
+// result.reason is "complete", "cancel", or "error"
+```
+
+This is different from `conversation.prompt()`, which resolves after a single model response. If the model responds with tool calls, `prompt()` returns after that first response while the workflow continues executing tools in the background. `manager.run()` waits for the entire loop to finish.
+
+### Events
+
+The workflow manager also emits events throughout its lifecycle, making it possible to observe the full agentic loop without `run()`.
+
+```typescript
+using manager = new WorkflowManager(conversation);
+
 manager.once("workflow_begin", (workflow) =>
   workflow.once("workflow_end", () => {
     console.log(conversation.messages.at(-1));

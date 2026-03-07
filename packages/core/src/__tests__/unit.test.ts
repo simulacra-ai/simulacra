@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import {
   deep_merge,
@@ -18,6 +19,8 @@ import { ToolContextTransformer } from "../context-transformers/tool-context-tra
 import { CheckpointContextTransformer } from "../context-transformers/checkpoint-context-transformer.ts";
 import type { Message, AssistantMessage, UserMessage } from "../conversations/types.ts";
 import type { PolicyErrorResult } from "../policies/types.ts";
+import { WorkflowManager } from "../workflows/workflow-manager.ts";
+import type { Conversation } from "../conversations/conversation.ts";
 
 // ---------------------------------------------------------------------------
 // deep_merge
@@ -599,5 +602,120 @@ describe("CheckpointContextTransformer", () => {
     expect((result[0].content[0] as { type: string; text: string }).text).toBe("Summary up to m3.");
     // m3 is skipped, next is m4
     expect(result[1].id).toBe("m4");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WorkflowManager.run
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal fake conversation backed by an EventEmitter. Enough for
+ * WorkflowManager and Workflow to run their event-driven loops without
+ * needing a real provider.
+ */
+class FakeConversation {
+  #emitter = new EventEmitter();
+  toolkit: unknown[] = [];
+
+  on(event: string, handler: (...args: unknown[]) => void) {
+    this.#emitter.on(event, handler);
+    return this;
+  }
+  once(event: string, handler: (...args: unknown[]) => void) {
+    this.#emitter.once(event, handler);
+    return this;
+  }
+  off(event: string, handler: (...args: unknown[]) => void) {
+    this.#emitter.off(event, handler);
+    return this;
+  }
+
+  async prompt(text: string) {
+    const message = { role: "user" as const, content: [{ type: "text" as const, text }] };
+    this.#emitter.emit("prompt_send", { message }, this);
+    return { message };
+  }
+
+  async send_message(contents: unknown[]) {
+    const message = { role: "user" as const, content: contents };
+    this.#emitter.emit("prompt_send", { message }, this);
+    return { message };
+  }
+
+  /** Test helper: simulate a completed model response. */
+  complete(stop_reason = "end_turn") {
+    const message = {
+      role: "assistant" as const,
+      content: [{ type: "text" as const, text: "ok" }],
+    };
+    this.#emitter.emit("message_complete", { stop_reason, message }, this);
+  }
+
+  /** Test helper: simulate a request error. */
+  error(err: Error) {
+    this.#emitter.emit("request_error", { error: err }, {}, this);
+  }
+}
+
+describe("WorkflowManager.run", () => {
+  it("resolves with reason 'complete' after a simple prompt", async () => {
+    const conversation = new FakeConversation();
+    const manager = new WorkflowManager(conversation as unknown as Conversation);
+
+    const promise = manager.run("hello");
+    conversation.complete("end_turn");
+
+    const result = await promise;
+    expect(result).toEqual({ reason: "complete" });
+  });
+
+  it("resolves with reason 'error' on request error", async () => {
+    const conversation = new FakeConversation();
+    const manager = new WorkflowManager(conversation as unknown as Conversation);
+
+    const promise = manager.run("hello");
+    conversation.error(new Error("network failure"));
+
+    const result = await promise;
+    expect(result).toEqual({ reason: "error" });
+  });
+
+  it("throws if called when not idle", async () => {
+    const conversation = new FakeConversation();
+    const manager = new WorkflowManager(conversation as unknown as Conversation);
+
+    const first = manager.run("first");
+
+    await expect(manager.run("second")).rejects.toThrow("invalid state");
+
+    conversation.complete("end_turn");
+    await first;
+  });
+
+  it("works with UserContent[] overload", async () => {
+    const conversation = new FakeConversation();
+    const manager = new WorkflowManager(conversation as unknown as Conversation);
+
+    const promise = manager.run([{ type: "text", text: "hello" }]);
+    conversation.complete("end_turn");
+
+    const result = await promise;
+    expect(result).toEqual({ reason: "complete" });
+  });
+
+  it("returns to idle state after run completes", async () => {
+    const conversation = new FakeConversation();
+    const manager = new WorkflowManager(conversation as unknown as Conversation);
+
+    expect(manager.state).toBe("idle");
+
+    const promise = manager.run("hello");
+    expect(manager.state).toBe("busy");
+
+    conversation.complete("end_turn");
+    await promise;
+
+    expect(manager.state).toBe("idle");
   });
 });

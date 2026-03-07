@@ -78,18 +78,12 @@ using manager = new WorkflowManager(conversation);
 // add the tool to the model's toolkit
 conversation.toolkit = [WeatherTool];
 
-// log responses as they complete
-conversation.on("content_complete", ({ content }) => {
-  if (content.type === "tool") {
-    console.log(`Calling tool: ${content.tool}`);
-  } else if (content.type === "text") {
-    console.log(content.text);
-  }
-});
-
-// ask it a question
-await conversation.prompt("What's the weather in Tokyo?");
+// run a prompt through the full workflow loop
+const result = await manager.run("What's the weather in Tokyo?");
+// result.reason is "complete", "cancel", or "error"
 ```
+
+`conversation.prompt()` resolves after a single model response. If the model responds with tool calls, `prompt()` returns after that first response while the workflow continues executing tools in the background. `manager.run()` waits for everything to finish.
 
 Tools can also be imported from MCP servers using the [MCP bridge](packages/mcp), which connects to any MCP-compatible tool server and exposes its tools to the model.
 

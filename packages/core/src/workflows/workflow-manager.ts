@@ -2,9 +2,9 @@ import { EventEmitter } from "node:events";
 import { setImmediate } from "node:timers/promises";
 
 import { Conversation } from "../conversations/index.ts";
-import { WorkflowEvents, WorkflowManagerEvents, WorkflowState } from "./types.ts";
+import { WorkflowEndEvent, WorkflowEvents, WorkflowManagerEvents, WorkflowState } from "./types.ts";
 import { Workflow } from "./workflow.ts";
-import { PromptRequestData } from "../conversations/types.ts";
+import { PromptRequestData, UserContent } from "../conversations/types.ts";
 
 /**
  * Automatically manages workflow lifecycle for a conversation.
@@ -144,6 +144,36 @@ export class WorkflowManager {
     if (this.#state !== "idle") {
       throw new Error("invalid state");
     }
+  }
+
+  /**
+   * Sends a prompt and returns a promise that resolves when the full workflow
+   * completes, including all tool execution rounds.
+   */
+  async run(prompt: string): Promise<WorkflowEndEvent>;
+  async run(contents: UserContent[]): Promise<WorkflowEndEvent>;
+  async run(input: string | UserContent[]): Promise<WorkflowEndEvent> {
+    if (this.#state !== "idle") {
+      throw new Error("invalid state");
+    }
+
+    const workflow_end = new Promise<WorkflowEndEvent>((resolve) => {
+      const handler = (event: WorkflowManagerEvents["workflow_event"][0]) => {
+        if (event.event_name === "workflow_end") {
+          this.off("workflow_event", handler);
+          resolve(event.event_args[0] as WorkflowEndEvent);
+        }
+      };
+      this.on("workflow_event", handler);
+    });
+
+    if (typeof input === "string") {
+      await this.#conversation.prompt(input);
+    } else {
+      await this.#conversation.send_message(input);
+    }
+
+    return workflow_end;
   }
 
   #on_prompt_send = ({ message }: PromptRequestData) => {

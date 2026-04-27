@@ -127,6 +127,27 @@ const store = new DrizzleSessionStore({
 
 The `DrizzleSessionRow` and `DrizzleSessionAdapter` types are exported for reference when defining a table schema and adapter. See the JSDoc on `DrizzleSessionRow` for example PostgreSQL and SQLite table definitions.
 
+**PrismaSessionStore** persists sessions using Prisma Client without making Prisma a dependency of `@simulacra-ai/session`. Define the model in your application schema, generate your Prisma client there, and pass the generated model delegate to the store.
+
+```prisma
+model Session {
+  id         String   @id
+  metadata   Json
+  messages   Json
+  updated_at DateTime
+}
+```
+
+```typescript
+import { PrismaSessionStore } from "@simulacra-ai/session";
+import { PrismaClient } from "./generated/prisma/client";
+
+const prisma = new PrismaClient();
+const store = new PrismaSessionStore(prisma.session);
+```
+
+The `PrismaSessionRow` and `PrismaSessionDelegate` types are exported for reference. They are structural types, so no Prisma types are imported by this package at runtime or compile time.
+
 Custom storage backends (databases, cloud storage, key-value stores) can be built by implementing the `SessionStore` interface. The [extensibility guide](EXTENSIBILITY.md) covers the interface, implementation notes, and includes a full example.
 
 ## License

@@ -1,0 +1,58 @@
+{
+  "name": "@simulacra-ai/nestjs",
+  "version": "0.0.8",
+  "description": "NestJS integration module for the Simulacra conversation engine",
+  "type": "module",
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "test": "vitest run --config vitest.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts --reporter=verbose",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "@nestjs/common": ">=10.0.0 <12.0.0",
+    "@nestjs/core": ">=10.0.0 <12.0.0",
+    "@simulacra-ai/core": "0.0.8",
+    "@simulacra-ai/session": "0.0.8"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.1.9",
+    "@nestjs/core": "^11.1.9",
+    "@nestjs/testing": "^11.1.9",
+    "@simulacra-ai/core": "*",
+    "@simulacra-ai/session": "*",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/simulacra-ai/simulacra.git",
+    "directory": "packages/nestjs"
+  },
+  "homepage": "https://github.com/simulacra-ai/simulacra",
+  "keywords": [
+    "ai",
+    "llm",
+    "agent",
+    "nestjs",
+    "simulacra"
+  ],
+  "license": "MIT"
+}

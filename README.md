@@ -162,6 +162,7 @@ Package|Description
 [`@simulacra-ai/mcp`](packages/mcp)|MCP client bridge
 [`@simulacra-ai/session`](packages/session)|Session persistence and forking
 [`@simulacra-ai/orchestration`](packages/orchestration)|Multi-agent execution patterns
+[`@simulacra-ai/nestjs`](packages/nestjs)|NestJS module and decorators for dependency injection
 
 ## License
 

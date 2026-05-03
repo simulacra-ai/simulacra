@@ -29,7 +29,6 @@
     "@simulacra-ai/core": "0.0.9"
   },
   "devDependencies": {
-    "@simulacra-ai/core": "*",
     "@types/better-sqlite3": "^7.6.12",
     "better-sqlite3": "^11.8.1",
     "drizzle-orm": "^0.39.3",

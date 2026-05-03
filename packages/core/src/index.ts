@@ -13,3 +13,4 @@ export {
 } from "./utils/async.ts";
 export { deep_merge, undefined_if_empty } from "./utils/object.ts";
 export type { DeepPartial, Prettify } from "./utils/types.ts";
+export { serialize_error } from "./utils/serialize-error.ts";

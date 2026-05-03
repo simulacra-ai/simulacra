@@ -28,6 +28,15 @@ export default [
         Buffer: "readonly",
         __dirname: "readonly",
         __filename: "readonly",
+        // Web-standard globals (Node 18+ / modern browsers)
+        ReadableStream: "readonly",
+        WritableStream: "readonly",
+        TransformStream: "readonly",
+        TextEncoder: "readonly",
+        TextDecoder: "readonly",
+        AbortController: "readonly",
+        AbortSignal: "readonly",
+        queueMicrotask: "readonly",
       },
     },
     plugins: {

@@ -23,7 +23,7 @@ import { Conversation } from "@simulacra-ai/core";
 import { AnthropicProvider } from "@simulacra-ai/anthropic";
 import Anthropic from "@anthropic-ai/sdk";
 
-const provider = new AnthropicProvider(new Anthropic(), { model: MODEL_NAME });
+const provider = new AnthropicProvider(new Anthropic(), { model: "claude-sonnet-4-5" });
 using conversation = new Conversation(provider);
 
 await conversation.prompt("Hello!");
@@ -65,7 +65,6 @@ class WeatherTool {
       parameters: [{ name: "city", type: "string", required: true }],
     };
   }
-  constructor(context) {}
   async execute({ city }) {
     return { result: true, temperature: 72, conditions: "sunny" };
   }
@@ -136,8 +135,52 @@ const store = new FileSessionStore("./sessions");
 using session = new SessionManager(store, conversation, { auto_save: true });
 
 // resume a previous session by ID
-await session.load(MY_SESSION_ID);
+await session.load("my-session-id");
 await conversation.prompt("Let's pick up where we left off.");
+```
+
+## Streaming Transport
+
+The [stream-server](packages/stream-server) and [stream-client](packages/stream-client) packages provide a transport-agnostic event stream for a `Conversation`. `encode_conversation` produces a typed `ReadableStream<WireEvent>`; thin adapters frame it as NDJSON for HTTP response streaming, SSE, or you can iterate directly to send each event over a WebSocket. The client side consumes any `AsyncIterable<WireEvent>`.
+
+```typescript
+// Server (HTTP / NDJSON)
+import { encode_conversation, to_ndjson_stream } from "@simulacra-ai/stream-server";
+
+const { body, headers } = to_ndjson_stream(encode_conversation(conversation));
+return new Response(body, { headers });
+```
+
+```typescript
+// Server (SSE)
+import { encode_conversation, to_sse_stream } from "@simulacra-ai/stream-server";
+
+const { body, headers } = to_sse_stream(encode_conversation(conversation));
+return new Response(body, { headers });
+```
+
+```typescript
+// Server (WebSocket)
+import { encode_conversation } from "@simulacra-ai/stream-server";
+
+for await (const event of encode_conversation(conversation)) {
+  ws.send(JSON.stringify(event));
+}
+```
+
+```typescript
+// Client
+import { RemoteConversation, decode_ndjson } from "@simulacra-ai/stream-client";
+
+const remote = new RemoteConversation(decode_ndjson(response.body!));
+
+remote.on("content_update", ({ content }) => {
+  if (content?.type === "text" && content.text) {
+    process.stdout.write(content.text);
+  }
+});
+
+const { text, tool_calls } = await remote.consume();
 ```
 
 ## Documentation
@@ -157,6 +200,8 @@ Package|Description
 [`@simulacra-ai/mcp`](packages/mcp)|MCP client bridge
 [`@simulacra-ai/session`](packages/session)|Session persistence and forking
 [`@simulacra-ai/orchestration`](packages/orchestration)|Multi-agent execution patterns
+[`@simulacra-ai/stream-server`](packages/stream-server)|Server-side encoder for streaming Conversation events (HTTP / SSE / WebSocket)
+[`@simulacra-ai/stream-client`](packages/stream-client)|Client-side decoder + `RemoteConversation` facade
 
 ## License
 

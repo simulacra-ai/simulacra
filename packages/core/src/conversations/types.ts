@@ -208,6 +208,48 @@ export interface LifecycleErrorEvent {
 }
 
 /**
+ * JSON-safe normalized error shape for streaming over a wire.
+ */
+export interface WireError {
+  name: string;
+  message: string;
+  stack?: string;
+}
+
+/**
+ * Wire-safe variant of {@link ErrorRequestEvent}. Drops `message` (carries
+ * the user's prompt) and replaces `error` with a {@link WireError}.
+ */
+export type WireErrorRequestEvent = Omit<ErrorRequestEvent, "error" | "message"> & {
+  error: WireError;
+};
+
+/**
+ * Wire-safe variant of {@link LifecycleErrorEvent} with a JSON-safe error field.
+ */
+export type WireLifecycleErrorEvent = Omit<LifecycleErrorEvent, "error"> & { error: WireError };
+
+/**
+ * Discriminated `{type, data}` envelope for every event that can travel
+ * over a wire (NDJSON, SSE, WebSocket). Mirrors {@link ConversationEvents}
+ * but drops the trailing `Conversation` argument (not serializable) and
+ * uses JSON-safe error shapes.
+ */
+export type WireEvent =
+  | { type: "state_change"; data: ChangeEvent<ConversationState> }
+  | { type: "prompt_send"; data: PromptRequestData }
+  | { type: "message_start"; data: PartialMessageCompletionEvent }
+  | { type: "message_update"; data: PartialMessageCompletionEvent }
+  | { type: "message_complete"; data: FullMessageCompletionEvent }
+  | { type: "content_start"; data: PartialContentCompletionEvent }
+  | { type: "content_update"; data: PartialContentCompletionEvent }
+  | { type: "content_complete"; data: FullContentCompletionEvent }
+  | { type: "request_error"; data: WireErrorRequestEvent }
+  | { type: "lifecycle_error"; data: WireLifecycleErrorEvent };
+
+export type WireEventType = WireEvent["type"];
+
+/**
  * Partial message completion event during streaming.
  */
 export type PartialMessageCompletionEvent = CompletionStreamingResponseData & {

@@ -6,7 +6,11 @@ export type {
 } from "./types.ts";
 
 export { SessionManager } from "./session-manager.ts";
-export { FileSessionStore } from "./file-session-store.ts";
+export {
+  FileSessionStore,
+  type FileSessionFormat,
+  type FileSessionStoreOptions,
+} from "./file-session-store.ts";
 export { InMemorySessionStore } from "./in-memory-session-store.ts";
 export {
   DrizzleSessionStore,

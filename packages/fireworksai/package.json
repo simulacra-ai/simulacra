@@ -30,8 +30,6 @@
     "openai": ">=4.0.0 <7.0.0"
   },
   "devDependencies": {
-    "@simulacra-ai/core": "*",
-    "openai": "^4.0.0",
     "vitest": "^3.0.0"
   },
   "repository": {

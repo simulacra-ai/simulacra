@@ -1,8 +1,9 @@
 {
-  "name": "@simulacra-ai/cloudflare",
+  "name": "@simulacra-ai/stream-client",
   "version": "0.0.9",
-  "description": "Cloudflare AI Gateway provider for the Simulacra conversation engine",
+  "description": "Client-side decoder and RemoteConversation facade for consuming Simulacra Conversation event streams",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": {
       "require": {
@@ -22,12 +23,10 @@
     "build": "tsup",
     "clean": "rm -rf dist *.tsbuildinfo",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts --reporter=verbose"
+    "test:watch": "vitest"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.9",
-    "openai": ">=4.0.0 <7.0.0"
+    "@simulacra-ai/core": "0.0.9"
   },
   "devDependencies": {
     "vitest": "^3.0.0"
@@ -35,15 +34,16 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/simulacra-ai/simulacra.git",
-    "directory": "packages/cloudflare"
+    "directory": "packages/stream-client"
   },
   "homepage": "https://github.com/simulacra-ai/simulacra",
   "keywords": [
     "ai",
     "llm",
-    "cloudflare",
-    "ai-gateway",
     "agent",
+    "ndjson",
+    "streaming",
+    "http",
     "simulacra"
   ],
   "license": "MIT"

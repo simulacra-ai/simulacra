@@ -2,6 +2,9 @@
   "name": "simulacra-monorepo",
   "version": "0.0.9",
   "private": true,
+  "engines": {
+    "node": ">=18"
+  },
   "workspaces": [
     "packages/*"
   ],
@@ -18,11 +21,13 @@
     "precommit": "npm run lint && npm run format:check && npm run typecheck"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "eslint": "^9.39.3",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.1",
-    "tsup": "^8.5.1"
+    "tsup": "^8.5.1",
+    "typescript": "~5.7.0"
   }
 }

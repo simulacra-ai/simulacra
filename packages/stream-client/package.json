@@ -1,6 +1,6 @@
 {
   "name": "@simulacra-ai/stream-client",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "Client-side decoder and RemoteConversation facade for consuming Simulacra Conversation event streams",
   "type": "module",
   "sideEffects": false,
@@ -26,7 +26,7 @@
     "test:watch": "vitest"
   },
   "peerDependencies": {
-    "@simulacra-ai/core": "0.0.10"
+    "@simulacra-ai/core": "0.0.11"
   },
   "devDependencies": {
     "vitest": "^3.0.0"

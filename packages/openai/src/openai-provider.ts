@@ -19,6 +19,13 @@ import type {
 
 type Prettify<T> = { [K in keyof T]: T[K] } & {};
 
+const OPENAI_REASONING_DELTA_KEYS = ["reasoning", "reasoning_content", "thinking"] as const;
+
+type OpenAIReasoningDeltaKey = (typeof OPENAI_REASONING_DELTA_KEYS)[number];
+type OpenAICompletionDelta = OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta;
+type OpenAIReasoningDelta = OpenAICompletionDelta &
+  Partial<Record<OpenAIReasoningDeltaKey, string>>;
+
 /**
  * Configuration options for the OpenAI provider.
  */
@@ -162,6 +169,30 @@ export class OpenAIProvider implements ModelProvider {
               choice.delta.refusal = "";
             }
             choice.delta.refusal += delta_chunk.refusal;
+          }
+          const reasoning_delta = get_openai_reasoning_delta(delta_chunk);
+          if (reasoning_delta) {
+            const choice_delta = choice.delta as OpenAIReasoningDelta;
+            const existing = choice_delta[reasoning_delta.key];
+            if (!existing) {
+              choice_delta[reasoning_delta.key] = reasoning_delta.thought;
+              receiver.start_content({
+                content: from_openai_thinking(choice_delta) as AssistantContent,
+                message: from_openai_completion(response_chunk, choice),
+                usage: response?.usage ? from_openai_usage(response.usage) : {},
+              });
+              receiver.update_message({
+                message: from_openai_completion(response_chunk, choice),
+                usage: response?.usage ? from_openai_usage(response.usage) : {},
+              });
+            } else {
+              choice_delta[reasoning_delta.key] = existing + reasoning_delta.thought;
+              receiver.update_content({
+                content: from_openai_thinking(choice_delta) as AssistantContent,
+                message: from_openai_completion(response_chunk, choice),
+                usage: response?.usage ? from_openai_usage(response.usage) : {},
+              });
+            }
           }
           if (delta_chunk.content) {
             if (!choice.delta.content) {
@@ -331,19 +362,38 @@ function from_openai_completion(
   choice: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
 ) {
   let contents: Content[] = [];
-  for (const k in choice.delta) {
-    const key = k as keyof typeof choice.delta;
+  const thinking = from_openai_thinking(choice.delta);
+  if (thinking) {
+    contents = [...contents, thinking];
+  }
+  const delta_record = choice.delta as Record<string, unknown>;
+  for (const key of Object.keys(choice.delta)) {
     if (key === "role") {
       continue;
     }
-    if (key === "content" && choice.delta.content) {
-      contents = [...contents, from_openai_content(choice.delta)];
-    } else if (key === "refusal" && choice.delta.refusal) {
-      contents = [...contents, from_openai_refusal(choice.delta)];
-    } else if (key === "tool_calls" && choice.delta.tool_calls) {
-      contents = [...contents, ...choice.delta.tool_calls.map((t) => from_openai_tool_call(t))];
-    } else if (choice.delta[key] !== undefined && choice.delta[key] !== null) {
-      const { [key]: data } = choice.delta;
+    if (is_openai_reasoning_delta_key(key)) {
+      continue;
+    }
+    if (key === "content") {
+      if (choice.delta.content) {
+        contents = [...contents, from_openai_content(choice.delta)];
+      }
+      continue;
+    }
+    if (key === "refusal") {
+      if (choice.delta.refusal) {
+        contents = [...contents, from_openai_refusal(choice.delta)];
+      }
+      continue;
+    }
+    if (key === "tool_calls") {
+      if (choice.delta.tool_calls) {
+        contents = [...contents, ...choice.delta.tool_calls.map((t) => from_openai_tool_call(t))];
+      }
+      continue;
+    }
+    if (delta_record[key] !== undefined && delta_record[key] !== null) {
+      const data = delta_record[key];
       contents = [
         ...contents,
         {
@@ -362,32 +412,67 @@ function from_openai_completion(
   } as AssistantMessage;
 }
 
-function from_openai_refusal(content: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta) {
-  const { refusal, tool_calls: _, function_call: __, content: ___, role: ____, ...rest } = content;
+function get_openai_reasoning_delta(delta: OpenAICompletionDelta) {
+  const record = delta as Partial<Record<OpenAIReasoningDeltaKey, unknown>>;
+  for (const key of OPENAI_REASONING_DELTA_KEYS) {
+    const thought = record[key];
+    if (typeof thought === "string" && thought.length > 0) {
+      return { key, thought };
+    }
+  }
+  return undefined;
+}
+
+function from_openai_thinking(content: OpenAICompletionDelta) {
+  const reasoning = get_openai_reasoning_delta(content);
+  if (!reasoning) {
+    return undefined;
+  }
+  const extended = get_openai_delta_extended(content);
+  return {
+    type: "thinking",
+    thought: reasoning.thought,
+    extended: {
+      ...extended,
+      openai_reasoning_field: reasoning.key,
+    },
+  } as Content;
+}
+
+function is_openai_reasoning_delta_key(key: string): key is OpenAIReasoningDeltaKey {
+  return OPENAI_REASONING_DELTA_KEYS.includes(key as OpenAIReasoningDeltaKey);
+}
+
+function from_openai_refusal(content: OpenAICompletionDelta) {
   return {
     type: "text",
-    text: refusal,
+    text: content.refusal,
     extended: {
-      ...rest,
+      ...get_openai_delta_extended(content),
       openai_refusal: true,
     },
   } as Content;
 }
 
-function from_openai_content(content: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta) {
-  const {
-    content: c,
-    tool_calls: _,
-    function_call: __,
-    refusal: ___,
-    role: ____,
-    ...rest
-  } = content;
+function from_openai_content(content: OpenAICompletionDelta) {
   return {
     type: "text",
-    text: c,
-    extended: rest,
+    text: content.content,
+    extended: get_openai_delta_extended(content),
   } as Content;
+}
+
+function get_openai_delta_extended(content: OpenAICompletionDelta) {
+  const extended = { ...(content as Record<string, unknown>) };
+  delete extended.content;
+  delete extended.tool_calls;
+  delete extended.function_call;
+  delete extended.refusal;
+  delete extended.role;
+  for (const key of OPENAI_REASONING_DELTA_KEYS) {
+    delete extended[key];
+  }
+  return extended;
 }
 
 function from_openai_tool_call(

@@ -377,6 +377,144 @@ describe("OpenAIProvider -- tool call streaming", () => {
 });
 
 // ---------------------------------------------------------------------------
+// execute_request -- reasoning content streaming
+// ---------------------------------------------------------------------------
+
+describe("OpenAIProvider -- streaming reasoning response", () => {
+  it("maps OpenAI-compatible reasoning deltas to thinking content", async () => {
+    const stream = async_stream(
+      make_chunk({
+        choices: [
+          make_choice(
+            0,
+            {
+              role: "assistant",
+              content: "",
+              reasoning: "Think",
+            } as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
+            null,
+          ),
+        ],
+      }),
+      make_chunk({
+        choices: [
+          make_choice(
+            0,
+            {
+              content: "",
+              reasoning: "ing",
+            } as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
+            null,
+          ),
+        ],
+      }),
+      make_chunk({ choices: [make_choice(0, { content: "PONG" }, null)] }),
+      make_chunk({ choices: [make_choice(0, {}, "stop")] }),
+    );
+
+    const sdk = make_mock_sdk(stream);
+    const provider = new OpenAIProvider(sdk, { model: "qwen3.6:35b-a3b" });
+    const receiver = make_receiver();
+
+    await provider.execute_request(
+      { messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }], tools: [] },
+      receiver,
+      no_cancel,
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    const [start_event] = receiver.calls.start_content[0] as [
+      { content: { type: string; thought: string; extended: Record<string, unknown> } },
+    ];
+    expect(start_event.content.type).toBe("thinking");
+    expect(start_event.content.thought).toBe("Think");
+    expect(start_event.content.extended.openai_reasoning_field).toBe("reasoning");
+    expect(
+      receiver.calls.start_content.some(([event]) => {
+        const content = (event as { content: { type: string } }).content;
+        return content.type === "raw";
+      }),
+    ).toBe(false);
+
+    const thinking_updates = receiver.calls.update_content.filter(([event]) => {
+      const content = (event as { content: { type: string } }).content;
+      return content.type === "thinking";
+    }) as [{ content: { type: string; thought: string } }][];
+    expect(thinking_updates.at(-1)?.[0].content.thought).toBe("Thinking");
+
+    const [complete_event] = receiver.calls.complete_message[0] as [
+      {
+        message: {
+          content: {
+            type: string;
+            thought?: string;
+            text?: string;
+            extended?: Record<string, unknown>;
+          }[];
+        };
+      },
+    ];
+    expect(complete_event.message.content).toEqual([
+      expect.objectContaining({ type: "thinking", thought: "Thinking" }),
+      expect.objectContaining({ type: "text", text: "PONG" }),
+    ]);
+    expect(complete_event.message.content.some((content) => content.type === "raw")).toBe(false);
+    const text_content = complete_event.message.content.find((content) => content.type === "text");
+    expect(text_content?.extended).not.toHaveProperty("reasoning");
+    expect(text_content?.extended).not.toHaveProperty("reasoning_content");
+    expect(text_content?.extended).not.toHaveProperty("thinking");
+  });
+
+  it.each(["reasoning_content", "thinking"] as const)(
+    "maps %s deltas to thinking content",
+    async (field) => {
+      const stream = async_stream(
+        make_chunk({
+          choices: [
+            make_choice(
+              0,
+              {
+                role: "assistant",
+                [field]: "hidden thought",
+              } as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
+              null,
+            ),
+          ],
+        }),
+        make_chunk({ choices: [make_choice(0, {}, "stop")] }),
+      );
+
+      const sdk = make_mock_sdk(stream);
+      const provider = new OpenAIProvider(sdk, { model: "openai-compatible-reasoning-model" });
+      const receiver = make_receiver();
+
+      await provider.execute_request(
+        { messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }], tools: [] },
+        receiver,
+        no_cancel,
+      );
+      await new Promise((r) => setTimeout(r, 10));
+
+      const [complete_event] = receiver.calls.complete_message[0] as [
+        {
+          message: {
+            content: { type: string; thought?: string; extended?: Record<string, unknown> }[];
+          };
+        },
+      ];
+      expect(complete_event.message.content).toEqual([
+        expect.objectContaining({
+          type: "thinking",
+          thought: "hidden thought",
+          extended: expect.objectContaining({ openai_reasoning_field: field }),
+        }),
+      ]);
+      expect(complete_event.message.content.some((content) => content.type === "raw")).toBe(false);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
 // User message conversion
 // ---------------------------------------------------------------------------
 

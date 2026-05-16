@@ -47,6 +47,11 @@ export interface OpenAIProviderConfig extends Record<string, unknown> {
    *   o-series (`o1`, `o3`, `o4`, ...) → `"developer"`, anything else →
    *   `"system"` (the broadly-compatible default).
    * - `"system"` / `"developer"`: force the role regardless of model id.
+   *
+   * The heuristic matches on the bare model id and does not understand
+   * relay-style prefixes (`openai/o3`, `anthropic/claude-3-5-sonnet`,
+   * etc.) — set this explicitly when routing OpenAI models through a
+   * relay that uses `vendor/model` ids.
    */
   system_role?: "auto" | "system" | "developer";
   /**
@@ -60,6 +65,9 @@ export interface OpenAIProviderConfig extends Record<string, unknown> {
    * - `"auto"` (default): emit `strict: true` when the model id matches the
    *   built-in OpenAI heuristic — `gpt*` or o-series (`o1`, `o3`, `o4`, ...).
    *   Any other model id (deepseek, etc.) gets tool defs without `strict`.
+   *   The heuristic matches on the bare model id; relay-style prefixes
+   *   (`openai/gpt-4o`) are NOT recognized — set this explicitly when
+   *   routing OpenAI models through a relay.
    * - `"never"`: never emit `strict`.
    */
   strict_tools?: "auto" | "never";
@@ -375,15 +383,15 @@ function resolve_strict_tools(
 }
 
 // Best-effort match for OpenAI's o-series reasoning model ids (o1, o3,
-// o4-mini, etc.). The end-of-string-or-hyphen anchor avoids matching ids
-// like `o10x` where the digit run isn't terminated cleanly, but the
-// heuristic can still collide with a non-OpenAI vendor whose model id
-// happens to follow the same shape (e.g. some future provider naming a
-// model `o2-fast`). Operators in that situation should set `system_role`
-// and `strict_tools` explicitly on the config — the heuristic is a default,
-// not a constraint.
+// o4-mini, etc.). The leading non-zero digit and end-of-string-or-hyphen
+// anchor narrow the pattern to what OpenAI actually ships. Two known
+// failure modes: a non-OpenAI vendor whose model id happens to follow the
+// same shape (e.g. `o2-fast`) gets matched as o-series, and a relay-style
+// id like `openai/o3` is NOT matched because the regex anchors at start
+// of string. Operators in either situation should set `system_role` and
+// `strict_tools` explicitly — the heuristic is a default, not a constraint.
 function is_openai_reasoning_model(model: string): boolean {
-  return /^o\d+(-|$)/.test(model);
+  return /^o[1-9]\d*(-|$)/.test(model);
 }
 
 function to_openai_tool(tool: ToolDefinition, strict: boolean): OpenAI.Chat.ChatCompletionTool {

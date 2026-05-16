@@ -213,14 +213,14 @@ describe("OpenAIProvider -- system message handling", () => {
     expect(dev_msg).toBeUndefined();
   });
 
-  it("respects explicit systemRole: 'system' even for o-series models", async () => {
+  it("respects explicit system_role: 'system' even for o-series models", async () => {
     const stream = async_stream(
       make_chunk({ choices: [make_choice(0, { role: "assistant", content: "hi" }, null)] }),
       make_chunk({ choices: [make_choice(0, {}, "stop")] }),
     );
 
     const sdk = make_mock_sdk(stream);
-    const provider = new OpenAIProvider(sdk, { model: "o3", systemRole: "system" });
+    const provider = new OpenAIProvider(sdk, { model: "o3", system_role: "system" });
     const receiver = make_receiver();
 
     await provider.execute_request(
@@ -240,14 +240,14 @@ describe("OpenAIProvider -- system message handling", () => {
     expect(messages.some((m) => m.role === "developer")).toBe(false);
   });
 
-  it("respects explicit systemRole: 'developer' even for gpt models", async () => {
+  it("respects explicit system_role: 'developer' even for gpt models", async () => {
     const stream = async_stream(
       make_chunk({ choices: [make_choice(0, { role: "assistant", content: "hi" }, null)] }),
       make_chunk({ choices: [make_choice(0, {}, "stop")] }),
     );
 
     const sdk = make_mock_sdk(stream);
-    const provider = new OpenAIProvider(sdk, { model: "gpt-4o", systemRole: "developer" });
+    const provider = new OpenAIProvider(sdk, { model: "gpt-4o", system_role: "developer" });
     const receiver = make_receiver();
 
     await provider.execute_request(
@@ -319,8 +319,8 @@ describe("OpenAIProvider -- tool strict flag", () => {
     expect(tools[0].function.strict).toBeUndefined();
   });
 
-  it("respects explicit strictTools: 'never' for GPT models", async () => {
-    const params = await run_with({ model: "gpt-4o", strictTools: "never" });
+  it("respects explicit strict_tools: 'never' for GPT models", async () => {
+    const params = await run_with({ model: "gpt-4o", strict_tools: "never" });
     const tools = params.tools as { function: { strict?: boolean } }[];
     expect(tools[0].function.strict).toBeUndefined();
   });

@@ -48,7 +48,7 @@ export interface OpenAIProviderConfig extends Record<string, unknown> {
    *   `"system"` (the broadly-compatible default).
    * - `"system"` / `"developer"`: force the role regardless of model id.
    */
-  systemRole?: "auto" | "system" | "developer";
+  system_role?: "auto" | "system" | "developer";
   /**
    * Whether to emit OpenAI's strict structured-output flag on tool
    * definitions (`function.strict: true`).
@@ -57,11 +57,12 @@ export interface OpenAIProviderConfig extends Record<string, unknown> {
    * to the supplied JSON Schema. Most non-OpenAI endpoints either ignore the
    * field or reject it.
    *
-   * - `"auto"` (default): emit `strict: true` only for OpenAI models
-   *   (`gpt*` or o-series). Other models get tool defs without `strict`.
+   * - `"auto"` (default): emit `strict: true` when the model id matches the
+   *   built-in OpenAI heuristic — `gpt*` or o-series (`o1`, `o3`, `o4`, ...).
+   *   Any other model id (deepseek, etc.) gets tool defs without `strict`.
    * - `"never"`: never emit `strict`.
    */
-  strictTools?: "auto" | "never";
+  strict_tools?: "auto" | "never";
 }
 
 /**
@@ -76,8 +77,8 @@ export interface OpenAIProviderConfig extends Record<string, unknown> {
  * (DeepSeek, OpenRouter, self-hosted gateways, etc.). The default behaviour
  * picks `system` vs. `developer` for the system prompt and decides whether
  * to emit OpenAI's `strict` flag on tool defs based on the model id; both
- * can be overridden through `OpenAIProviderConfig.systemRole` and
- * `OpenAIProviderConfig.strictTools` for endpoints whose behaviour differs.
+ * can be overridden through `OpenAIProviderConfig.system_role` and
+ * `OpenAIProviderConfig.strict_tools` for endpoints whose behaviour differs.
  */
 export class OpenAIProvider implements ModelProvider {
   readonly #sdk: OpenAI;
@@ -114,8 +115,8 @@ export class OpenAIProvider implements ModelProvider {
     receiver: StreamReceiver,
     cancellation: CancellationToken,
   ): Promise<void> {
-    const { model, max_tokens, systemRole, strictTools, ...api_extras } = this.#config;
-    const emit_strict = resolve_strict_tools(model, strictTools);
+    const { model, max_tokens, system_role, strict_tools, ...api_extras } = this.#config;
+    const emit_strict = resolve_strict_tools(model, strict_tools);
     const params: OpenAI.ChatCompletionCreateParamsStreaming = {
       ...api_extras,
       model,
@@ -128,7 +129,7 @@ export class OpenAIProvider implements ModelProvider {
           }
         : {}),
       messages: [
-        ...get_system_context(model, request.system, systemRole),
+        ...get_system_context(model, request.system, system_role),
         ...request.messages.flatMap((m) => to_openai_messages(m)),
       ],
       stream_options: {
@@ -325,12 +326,12 @@ export class OpenAIProvider implements ModelProvider {
 function get_system_context(
   model: string,
   system: string | undefined,
-  systemRole: OpenAIProviderConfig["systemRole"] = "auto",
+  system_role: OpenAIProviderConfig["system_role"] = "auto",
 ): OpenAI.ChatCompletionMessageParam[] {
   if (!system) {
     return [];
   }
-  const role = resolve_system_role(model, systemRole);
+  const role = resolve_system_role(model, system_role);
   if (role === "developer") {
     return [
       {
@@ -349,10 +350,10 @@ function get_system_context(
 
 function resolve_system_role(
   model: string,
-  systemRole: OpenAIProviderConfig["systemRole"],
+  system_role: OpenAIProviderConfig["system_role"] = "auto",
 ): "system" | "developer" {
-  if (systemRole === "system" || systemRole === "developer") {
-    return systemRole;
+  if (system_role === "system" || system_role === "developer") {
+    return system_role;
   }
   if (model.startsWith("gpt")) {
     return "system";
@@ -365,20 +366,24 @@ function resolve_system_role(
 
 function resolve_strict_tools(
   model: string,
-  strictTools: OpenAIProviderConfig["strictTools"],
+  strict_tools: OpenAIProviderConfig["strict_tools"] = "auto",
 ): boolean {
-  if (strictTools === "never") {
+  if (strict_tools === "never") {
     return false;
   }
   return model.startsWith("gpt") || is_openai_reasoning_model(model);
 }
 
-// Matches OpenAI's o-series reasoning models: o1, o3, o4-mini, etc.
-// Used by both system-role and strict-tool defaults to decide whether the
-// model is from the OpenAI o-series family (which uses `developer` and
-// supports `strict`) vs. a non-OpenAI-compatible provider.
+// Best-effort match for OpenAI's o-series reasoning model ids (o1, o3,
+// o4-mini, etc.). The end-of-string-or-hyphen anchor avoids matching ids
+// like `o10x` where the digit run isn't terminated cleanly, but the
+// heuristic can still collide with a non-OpenAI vendor whose model id
+// happens to follow the same shape (e.g. some future provider naming a
+// model `o2-fast`). Operators in that situation should set `system_role`
+// and `strict_tools` explicitly on the config — the heuristic is a default,
+// not a constraint.
 function is_openai_reasoning_model(model: string): boolean {
-  return /^o\d/.test(model);
+  return /^o\d+(-|$)/.test(model);
 }
 
 function to_openai_tool(tool: ToolDefinition, strict: boolean): OpenAI.Chat.ChatCompletionTool {

@@ -175,6 +175,151 @@ describe("OpenAIProvider -- system message handling", () => {
     );
     expect(system_msg).toBeUndefined();
   });
+
+  it("uses 'system' role by default for non-OpenAI models (e.g. deepseek)", async () => {
+    const stream = async_stream(
+      make_chunk({
+        choices: [make_choice(0, { role: "assistant", content: "hi" }, null)],
+      }),
+      make_chunk({
+        choices: [make_choice(0, {}, "stop")],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      }),
+    );
+
+    const sdk = make_mock_sdk(stream);
+    const provider = new OpenAIProvider(sdk, { model: "deepseek-v4-flash" });
+    const receiver = make_receiver();
+
+    const request: ModelRequest = {
+      messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
+      tools: [],
+      system: "You are a helpful assistant.",
+    };
+
+    await provider.execute_request(request, receiver, no_cancel);
+    await new Promise((r) => setTimeout(r, 10));
+
+    const [call_params] = sdk.chat.completions.create.mock.calls[0];
+    const system_msg = (call_params.messages as { role: string; content: string }[]).find(
+      (m) => m.role === "system",
+    );
+    expect(system_msg).toBeDefined();
+    expect(system_msg?.content).toBe("You are a helpful assistant.");
+
+    const dev_msg = (call_params.messages as { role: string }[]).find(
+      (m) => m.role === "developer",
+    );
+    expect(dev_msg).toBeUndefined();
+  });
+
+  it("respects explicit systemRole: 'system' even for o-series models", async () => {
+    const stream = async_stream(
+      make_chunk({ choices: [make_choice(0, { role: "assistant", content: "hi" }, null)] }),
+      make_chunk({ choices: [make_choice(0, {}, "stop")] }),
+    );
+
+    const sdk = make_mock_sdk(stream);
+    const provider = new OpenAIProvider(sdk, { model: "o3", systemRole: "system" });
+    const receiver = make_receiver();
+
+    await provider.execute_request(
+      {
+        messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
+        tools: [],
+        system: "sys",
+      },
+      receiver,
+      no_cancel,
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    const [call_params] = sdk.chat.completions.create.mock.calls[0];
+    const messages = call_params.messages as { role: string }[];
+    expect(messages.some((m) => m.role === "system")).toBe(true);
+    expect(messages.some((m) => m.role === "developer")).toBe(false);
+  });
+
+  it("respects explicit systemRole: 'developer' even for gpt models", async () => {
+    const stream = async_stream(
+      make_chunk({ choices: [make_choice(0, { role: "assistant", content: "hi" }, null)] }),
+      make_chunk({ choices: [make_choice(0, {}, "stop")] }),
+    );
+
+    const sdk = make_mock_sdk(stream);
+    const provider = new OpenAIProvider(sdk, { model: "gpt-4o", systemRole: "developer" });
+    const receiver = make_receiver();
+
+    await provider.execute_request(
+      {
+        messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
+        tools: [],
+        system: "sys",
+      },
+      receiver,
+      no_cancel,
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    const [call_params] = sdk.chat.completions.create.mock.calls[0];
+    const messages = call_params.messages as { role: string }[];
+    expect(messages.some((m) => m.role === "developer")).toBe(true);
+    expect(messages.some((m) => m.role === "system")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// execute_request -- tool strictness
+// ---------------------------------------------------------------------------
+
+describe("OpenAIProvider -- tool strict flag", () => {
+  const tool = {
+    name: "echo",
+    description: "Echo the input string.",
+    parameters: [
+      { name: "value", type: "string", required: true, description: "The value to echo." },
+    ],
+  } as const;
+
+  async function run_with(config: Parameters<typeof OpenAIProvider>[1]) {
+    const stream = async_stream(
+      make_chunk({ choices: [make_choice(0, { role: "assistant", content: "hi" }, null)] }),
+      make_chunk({ choices: [make_choice(0, {}, "stop")] }),
+    );
+    const sdk = make_mock_sdk(stream);
+    const provider = new OpenAIProvider(sdk, config);
+    await provider.execute_request(
+      { messages: [{ role: "user", content: [{ type: "text", text: "Hi" }] }], tools: [tool], system: "" },
+      make_receiver(),
+      no_cancel,
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    return sdk.chat.completions.create.mock.calls[0][0];
+  }
+
+  it("emits strict: true on tool defs for GPT models by default", async () => {
+    const params = await run_with({ model: "gpt-4o" });
+    const tools = params.tools as { function: { strict?: boolean } }[];
+    expect(tools[0].function.strict).toBe(true);
+  });
+
+  it("emits strict: true on tool defs for o-series models by default", async () => {
+    const params = await run_with({ model: "o3" });
+    const tools = params.tools as { function: { strict?: boolean } }[];
+    expect(tools[0].function.strict).toBe(true);
+  });
+
+  it("omits strict on tool defs for non-OpenAI models by default", async () => {
+    const params = await run_with({ model: "deepseek-v4-flash" });
+    const tools = params.tools as { function: { strict?: boolean } }[];
+    expect(tools[0].function.strict).toBeUndefined();
+  });
+
+  it("respects explicit strictTools: 'never' for GPT models", async () => {
+    const params = await run_with({ model: "gpt-4o", strictTools: "never" });
+    const tools = params.tools as { function: { strict?: boolean } }[];
+    expect(tools[0].function.strict).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------

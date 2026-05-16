@@ -34,15 +34,50 @@ export interface OpenAIProviderConfig extends Record<string, unknown> {
   model: string;
   /** The maximum number of tokens to generate in the response. */
   max_tokens?: number;
+  /**
+   * Which role to use for the system prompt.
+   *
+   * The OpenAI Chat Completions spec allows `system` (legacy / most providers)
+   * and `developer` (introduced for o-series reasoning models). Most
+   * OpenAI-compatible endpoints (DeepSeek, OpenRouter relays, Anthropic-via-
+   * compat, self-hosted gateways, etc.) only accept `system` and reject
+   * `developer` with a 400.
+   *
+   * - `"auto"` (default): use the built-in heuristic — `gpt*` → `"system"`,
+   *   o-series (`o1`, `o3`, `o4`, ...) → `"developer"`, anything else →
+   *   `"system"` (the broadly-compatible default).
+   * - `"system"` / `"developer"`: force the role regardless of model id.
+   */
+  systemRole?: "auto" | "system" | "developer";
+  /**
+   * Whether to emit OpenAI's strict structured-output flag on tool
+   * definitions (`function.strict: true`).
+   *
+   * `strict` is an OpenAI-specific extension that constrains tool arguments
+   * to the supplied JSON Schema. Most non-OpenAI endpoints either ignore the
+   * field or reject it.
+   *
+   * - `"auto"` (default): emit `strict: true` only for OpenAI models
+   *   (`gpt*` or o-series). Other models get tool defs without `strict`.
+   * - `"never"`: never emit `strict`.
+   */
+  strictTools?: "auto" | "never";
 }
 
 /**
  * Model provider implementation for OpenAI's chat completion models.
  *
- * This provider wraps the OpenAI SDK to provide streaming completions with support
- * for tool use and function calling. It handles message formatting, content streaming,
- * and usage tracking according to the ModelProvider interface. Supports both GPT models
- * (using system messages) and O-series models (using developer messages).
+ * This provider wraps the OpenAI SDK to provide streaming completions with
+ * support for tool use and function calling. It handles message formatting,
+ * content streaming, and usage tracking according to the ModelProvider
+ * interface.
+ *
+ * Works against OpenAI directly as well as OpenAI-compatible endpoints
+ * (DeepSeek, OpenRouter, self-hosted gateways, etc.). The default behaviour
+ * picks `system` vs. `developer` for the system prompt and decides whether
+ * to emit OpenAI's `strict` flag on tool defs based on the model id; both
+ * can be overridden through `OpenAIProviderConfig.systemRole` and
+ * `OpenAIProviderConfig.strictTools` for endpoints whose behaviour differs.
  */
 export class OpenAIProvider implements ModelProvider {
   readonly #sdk: OpenAI;
@@ -79,7 +114,8 @@ export class OpenAIProvider implements ModelProvider {
     receiver: StreamReceiver,
     cancellation: CancellationToken,
   ): Promise<void> {
-    const { model, max_tokens, ...api_extras } = this.#config;
+    const { model, max_tokens, systemRole, strictTools, ...api_extras } = this.#config;
+    const emit_strict = resolve_strict_tools(model, strictTools);
     const params: OpenAI.ChatCompletionCreateParamsStreaming = {
       ...api_extras,
       model,
@@ -88,11 +124,11 @@ export class OpenAIProvider implements ModelProvider {
       ...(request.tools.length > 0
         ? {
             tool_choice: "auto",
-            tools: request.tools.map((t) => to_openai_tool(t)),
+            tools: request.tools.map((t) => to_openai_tool(t, emit_strict)),
           }
         : {}),
       messages: [
-        ...get_system_context(model, request.system),
+        ...get_system_context(model, request.system, systemRole),
         ...request.messages.flatMap((m) => to_openai_messages(m)),
       ],
       stream_options: {
@@ -286,27 +322,66 @@ export class OpenAIProvider implements ModelProvider {
   }
 }
 
-function get_system_context(model: string, system?: string): OpenAI.ChatCompletionMessageParam[] {
+function get_system_context(
+  model: string,
+  system: string | undefined,
+  systemRole: OpenAIProviderConfig["systemRole"] = "auto",
+): OpenAI.ChatCompletionMessageParam[] {
   if (!system) {
     return [];
   }
-  if (model.startsWith("gpt")) {
+  const role = resolve_system_role(model, systemRole);
+  if (role === "developer") {
     return [
       {
-        role: "system",
+        role: "developer",
         content: system,
-      } as OpenAI.ChatCompletionSystemMessageParam,
+      } as OpenAI.ChatCompletionDeveloperMessageParam,
     ];
   }
   return [
     {
-      role: "developer",
+      role: "system",
       content: system,
-    } as OpenAI.ChatCompletionDeveloperMessageParam,
+    } as OpenAI.ChatCompletionSystemMessageParam,
   ];
 }
 
-function to_openai_tool(tool: ToolDefinition): OpenAI.Chat.ChatCompletionTool {
+function resolve_system_role(
+  model: string,
+  systemRole: OpenAIProviderConfig["systemRole"],
+): "system" | "developer" {
+  if (systemRole === "system" || systemRole === "developer") {
+    return systemRole;
+  }
+  if (model.startsWith("gpt")) {
+    return "system";
+  }
+  if (is_openai_reasoning_model(model)) {
+    return "developer";
+  }
+  return "system";
+}
+
+function resolve_strict_tools(
+  model: string,
+  strictTools: OpenAIProviderConfig["strictTools"],
+): boolean {
+  if (strictTools === "never") {
+    return false;
+  }
+  return model.startsWith("gpt") || is_openai_reasoning_model(model);
+}
+
+// Matches OpenAI's o-series reasoning models: o1, o3, o4-mini, etc.
+// Used by both system-role and strict-tool defaults to decide whether the
+// model is from the OpenAI o-series family (which uses `developer` and
+// supports `strict`) vs. a non-OpenAI-compatible provider.
+function is_openai_reasoning_model(model: string): boolean {
+  return /^o\d/.test(model);
+}
+
+function to_openai_tool(tool: ToolDefinition, strict: boolean): OpenAI.Chat.ChatCompletionTool {
   function map_parameter_type(
     parameter: Prettify<ParameterType & { description?: string }>,
   ): OpenAI.FunctionParameters {
@@ -352,7 +427,7 @@ function to_openai_tool(tool: ToolDefinition): OpenAI.Chat.ChatCompletionTool {
           tool.parameters.map(({ name, ...parameter }) => [name, parameter]),
         ),
       }),
-      strict: true,
+      ...(strict ? { strict: true } : {}),
     },
   };
 }

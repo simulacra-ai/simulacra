@@ -34,15 +34,59 @@ export interface OpenAIProviderConfig extends Record<string, unknown> {
   model: string;
   /** The maximum number of tokens to generate in the response. */
   max_tokens?: number;
+  /**
+   * Which role to use for the system prompt.
+   *
+   * The OpenAI Chat Completions spec allows `system` (legacy / most providers)
+   * and `developer` (introduced for o-series reasoning models). Most
+   * OpenAI-compatible endpoints (DeepSeek, OpenRouter relays, Anthropic-via-
+   * compat, self-hosted gateways, etc.) only accept `system` and reject
+   * `developer` with a 400.
+   *
+   * - `"auto"` (default): use the built-in heuristic — `gpt*` → `"system"`,
+   *   o-series (`o1`, `o3`, `o4`, ...) → `"developer"`, anything else →
+   *   `"system"` (the broadly-compatible default).
+   * - `"system"` / `"developer"`: force the role regardless of model id.
+   *
+   * The heuristic matches on the bare model id and does not understand
+   * relay-style prefixes (`openai/o3`, `anthropic/claude-3-5-sonnet`,
+   * etc.) — set this explicitly when routing OpenAI models through a
+   * relay that uses `vendor/model` ids.
+   */
+  system_role?: "auto" | "system" | "developer";
+  /**
+   * Whether to emit OpenAI's strict structured-output flag on tool
+   * definitions (`function.strict: true`).
+   *
+   * `strict` is an OpenAI-specific extension that constrains tool arguments
+   * to the supplied JSON Schema. Most non-OpenAI endpoints either ignore the
+   * field or reject it.
+   *
+   * - `"auto"` (default): emit `strict: true` when the model id matches the
+   *   built-in OpenAI heuristic — `gpt*` or o-series (`o1`, `o3`, `o4`, ...).
+   *   Any other model id (deepseek, etc.) gets tool defs without `strict`.
+   *   The heuristic matches on the bare model id; relay-style prefixes
+   *   (`openai/gpt-4o`) are NOT recognized — set this explicitly when
+   *   routing OpenAI models through a relay.
+   * - `"never"`: never emit `strict`.
+   */
+  strict_tools?: "auto" | "never";
 }
 
 /**
  * Model provider implementation for OpenAI's chat completion models.
  *
- * This provider wraps the OpenAI SDK to provide streaming completions with support
- * for tool use and function calling. It handles message formatting, content streaming,
- * and usage tracking according to the ModelProvider interface. Supports both GPT models
- * (using system messages) and O-series models (using developer messages).
+ * This provider wraps the OpenAI SDK to provide streaming completions with
+ * support for tool use and function calling. It handles message formatting,
+ * content streaming, and usage tracking according to the ModelProvider
+ * interface.
+ *
+ * Works against OpenAI directly as well as OpenAI-compatible endpoints
+ * (DeepSeek, OpenRouter, self-hosted gateways, etc.). The default behaviour
+ * picks `system` vs. `developer` for the system prompt and decides whether
+ * to emit OpenAI's `strict` flag on tool defs based on the model id; both
+ * can be overridden through `OpenAIProviderConfig.system_role` and
+ * `OpenAIProviderConfig.strict_tools` for endpoints whose behaviour differs.
  */
 export class OpenAIProvider implements ModelProvider {
   readonly #sdk: OpenAI;
@@ -79,7 +123,8 @@ export class OpenAIProvider implements ModelProvider {
     receiver: StreamReceiver,
     cancellation: CancellationToken,
   ): Promise<void> {
-    const { model, max_tokens, ...api_extras } = this.#config;
+    const { model, max_tokens, system_role, strict_tools, ...api_extras } = this.#config;
+    const emit_strict = resolve_strict_tools(model, strict_tools);
     const params: OpenAI.ChatCompletionCreateParamsStreaming = {
       ...api_extras,
       model,
@@ -88,11 +133,11 @@ export class OpenAIProvider implements ModelProvider {
       ...(request.tools.length > 0
         ? {
             tool_choice: "auto",
-            tools: request.tools.map((t) => to_openai_tool(t)),
+            tools: request.tools.map((t) => to_openai_tool(t, emit_strict)),
           }
         : {}),
       messages: [
-        ...get_system_context(model, request.system),
+        ...get_system_context(model, request.system, system_role),
         ...request.messages.flatMap((m) => to_openai_messages(m)),
       ],
       stream_options: {
@@ -286,27 +331,70 @@ export class OpenAIProvider implements ModelProvider {
   }
 }
 
-function get_system_context(model: string, system?: string): OpenAI.ChatCompletionMessageParam[] {
+function get_system_context(
+  model: string,
+  system: string | undefined,
+  system_role: OpenAIProviderConfig["system_role"] = "auto",
+): OpenAI.ChatCompletionMessageParam[] {
   if (!system) {
     return [];
   }
-  if (model.startsWith("gpt")) {
+  const role = resolve_system_role(model, system_role);
+  if (role === "developer") {
     return [
       {
-        role: "system",
+        role: "developer",
         content: system,
-      } as OpenAI.ChatCompletionSystemMessageParam,
+      } as OpenAI.ChatCompletionDeveloperMessageParam,
     ];
   }
   return [
     {
-      role: "developer",
+      role: "system",
       content: system,
-    } as OpenAI.ChatCompletionDeveloperMessageParam,
+    } as OpenAI.ChatCompletionSystemMessageParam,
   ];
 }
 
-function to_openai_tool(tool: ToolDefinition): OpenAI.Chat.ChatCompletionTool {
+function resolve_system_role(
+  model: string,
+  system_role: OpenAIProviderConfig["system_role"] = "auto",
+): "system" | "developer" {
+  if (system_role === "system" || system_role === "developer") {
+    return system_role;
+  }
+  if (model.startsWith("gpt")) {
+    return "system";
+  }
+  if (is_openai_reasoning_model(model)) {
+    return "developer";
+  }
+  return "system";
+}
+
+function resolve_strict_tools(
+  model: string,
+  strict_tools: OpenAIProviderConfig["strict_tools"] = "auto",
+): boolean {
+  if (strict_tools === "never") {
+    return false;
+  }
+  return model.startsWith("gpt") || is_openai_reasoning_model(model);
+}
+
+// Best-effort match for OpenAI's o-series reasoning model ids (o1, o3,
+// o4-mini, etc.). The leading non-zero digit and end-of-string-or-hyphen
+// anchor narrow the pattern to what OpenAI actually ships. Two known
+// failure modes: a non-OpenAI vendor whose model id happens to follow the
+// same shape (e.g. `o2-fast`) gets matched as o-series, and a relay-style
+// id like `openai/o3` is NOT matched because the regex anchors at start
+// of string. Operators in either situation should set `system_role` and
+// `strict_tools` explicitly — the heuristic is a default, not a constraint.
+function is_openai_reasoning_model(model: string): boolean {
+  return /^o[1-9]\d*(-|$)/.test(model);
+}
+
+function to_openai_tool(tool: ToolDefinition, strict: boolean): OpenAI.Chat.ChatCompletionTool {
   function map_parameter_type(
     parameter: Prettify<ParameterType & { description?: string }>,
   ): OpenAI.FunctionParameters {
@@ -352,7 +440,7 @@ function to_openai_tool(tool: ToolDefinition): OpenAI.Chat.ChatCompletionTool {
           tool.parameters.map(({ name, ...parameter }) => [name, parameter]),
         ),
       }),
-      strict: true,
+      ...(strict ? { strict: true } : {}),
     },
   };
 }

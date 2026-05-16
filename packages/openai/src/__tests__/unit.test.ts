@@ -289,7 +289,11 @@ describe("OpenAIProvider -- tool strict flag", () => {
     const sdk = make_mock_sdk(stream);
     const provider = new OpenAIProvider(sdk, config);
     await provider.execute_request(
-      { messages: [{ role: "user", content: [{ type: "text", text: "Hi" }] }], tools: [tool], system: "" },
+      {
+        messages: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
+        tools: [tool],
+        system: "",
+      },
       make_receiver(),
       no_cancel,
     );

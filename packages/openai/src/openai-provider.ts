@@ -71,6 +71,16 @@ export interface OpenAIProviderConfig extends Record<string, unknown> {
    * - `"never"`: never emit `strict`.
    */
   strict_tools?: "auto" | "never";
+  /**
+   * Treatment of prior `thinking` content blocks when serializing assistant
+   * messages back up the wire.
+   *
+   * - `"inline"` (default): appended as text content. openai tolerates it.
+   * - `"field"`: emitted as a `reasoning_content` field. required by
+   *   deepseek v4 thinking-mode.
+   * - `"drop"`: omitted entirely.
+   */
+  upstream_reasoning?: "inline" | "field" | "drop";
 }
 
 /**
@@ -87,6 +97,9 @@ export interface OpenAIProviderConfig extends Record<string, unknown> {
  * to emit OpenAI's `strict` flag on tool defs based on the model id; both
  * can be overridden through `OpenAIProviderConfig.system_role` and
  * `OpenAIProviderConfig.strict_tools` for endpoints whose behaviour differs.
+ * `OpenAIProviderConfig.upstream_reasoning` controls how prior thinking
+ * content is round-tripped on subsequent calls for providers (deepseek v4)
+ * that require it in a specific shape.
  */
 export class OpenAIProvider implements ModelProvider {
   readonly #sdk: OpenAI;
@@ -123,8 +136,10 @@ export class OpenAIProvider implements ModelProvider {
     receiver: StreamReceiver,
     cancellation: CancellationToken,
   ): Promise<void> {
-    const { model, max_tokens, system_role, strict_tools, ...api_extras } = this.#config;
+    const { model, max_tokens, system_role, strict_tools, upstream_reasoning, ...api_extras } =
+      this.#config;
     const emit_strict = resolve_strict_tools(model, strict_tools);
+    const reasoning_mode = upstream_reasoning ?? "inline";
     const params: OpenAI.ChatCompletionCreateParamsStreaming = {
       ...api_extras,
       model,
@@ -138,7 +153,7 @@ export class OpenAIProvider implements ModelProvider {
         : {}),
       messages: [
         ...get_system_context(model, request.system, system_role),
-        ...request.messages.flatMap((m) => to_openai_messages(m)),
+        ...request.messages.flatMap((m) => to_openai_messages(m, reasoning_mode)),
       ],
       stream_options: {
         include_usage: true,
@@ -582,9 +597,12 @@ function from_openai_tool_call(
   } as ToolContent;
 }
 
-function to_openai_messages(message: Message) {
+function to_openai_messages(
+  message: Message,
+  upstream_reasoning: NonNullable<OpenAIProviderConfig["upstream_reasoning"]>,
+) {
   if (message.role === "assistant") {
-    return [to_openai_assistant_message(message)];
+    return [to_openai_assistant_message(message, upstream_reasoning)];
   }
   // Partition content so tool_result blocks come before non-tool_result blocks.
   // OpenAI requires all tool-role messages immediately after the assistant message
@@ -673,7 +691,10 @@ function to_openai_messages(message: Message) {
   return results;
 }
 
-function to_openai_assistant_message(message: AssistantMessage) {
+function to_openai_assistant_message(
+  message: AssistantMessage,
+  upstream_reasoning: NonNullable<OpenAIProviderConfig["upstream_reasoning"]>,
+) {
   let result: OpenAI.ChatCompletionAssistantMessageParam = {
     role: "assistant",
   };
@@ -740,6 +761,19 @@ function to_openai_assistant_message(message: AssistantMessage) {
         };
         break;
       case "thinking":
+        if (upstream_reasoning === "drop") {
+          break;
+        }
+        if (upstream_reasoning === "field") {
+          const widened = result as OpenAI.ChatCompletionAssistantMessageParam & {
+            reasoning_content?: string;
+          };
+          widened.reasoning_content =
+            widened.reasoning_content !== undefined
+              ? widened.reasoning_content + "\n" + content.thought
+              : content.thought;
+          break;
+        }
         if (typeof result.content === "string") {
           result.content = [
             {

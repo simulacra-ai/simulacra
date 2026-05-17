@@ -327,6 +327,79 @@ describe("OpenAIProvider -- tool strict flag", () => {
 });
 
 // ---------------------------------------------------------------------------
+// execute_request -- upstream_reasoning
+// ---------------------------------------------------------------------------
+
+describe("OpenAIProvider -- upstream_reasoning", () => {
+  const history: Message[] = [
+    { role: "user", content: [{ type: "text", text: "hello" }] },
+    {
+      role: "assistant",
+      content: [
+        { type: "thinking", thought: "user said hello, respond." },
+        { type: "text", text: "hi there" },
+      ],
+    },
+    { role: "user", content: [{ type: "text", text: "what next?" }] },
+  ];
+
+  async function run_with(config: Parameters<typeof OpenAIProvider>[1]) {
+    const stream = async_stream(
+      make_chunk({ choices: [make_choice(0, { role: "assistant", content: "ok" }, null)] }),
+      make_chunk({ choices: [make_choice(0, {}, "stop")] }),
+    );
+    const sdk = make_mock_sdk(stream);
+    const provider = new OpenAIProvider(sdk, config);
+    await provider.execute_request(
+      { messages: history, tools: [], system: "" },
+      make_receiver(),
+      no_cancel,
+    );
+    return sdk.chat.completions.create.mock.calls[0][0];
+  }
+
+  function assistant_msg(params: { messages: { role: string }[] }): {
+    role: string;
+    content?: string | { type: string; text: string }[];
+    reasoning_content?: string;
+  } {
+    const msg = params.messages.find((m) => m.role === "assistant");
+    expect(msg).toBeDefined();
+    return msg as ReturnType<typeof assistant_msg>;
+  }
+
+  it("inlines thinking into content by default", async () => {
+    const params = await run_with({ model: "gpt-4o" });
+    const msg = assistant_msg(params);
+    expect(msg.reasoning_content).toBeUndefined();
+    expect(msg.content).toEqual([
+      { type: "text", text: "user said hello, respond." },
+      { type: "text", text: "hi there" },
+    ]);
+  });
+
+  it("emits thinking as a top-level reasoning_content field when upstream_reasoning is 'field'", async () => {
+    const params = await run_with({
+      model: "deepseek-v4-flash",
+      upstream_reasoning: "field",
+    });
+    const msg = assistant_msg(params);
+    expect(msg.reasoning_content).toBe("user said hello, respond.");
+    expect(msg.content).toBe("hi there");
+  });
+
+  it("omits thinking entirely when upstream_reasoning is 'drop'", async () => {
+    const params = await run_with({
+      model: "gpt-4o",
+      upstream_reasoning: "drop",
+    });
+    const msg = assistant_msg(params);
+    expect(msg.reasoning_content).toBeUndefined();
+    expect(msg.content).toBe("hi there");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // execute_request -- streaming text response
 // ---------------------------------------------------------------------------
 

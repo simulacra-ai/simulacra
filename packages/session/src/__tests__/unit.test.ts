@@ -5,6 +5,11 @@ import {
   type DrizzleSessionAdapter,
   type DrizzleSessionRow,
 } from "../drizzle-session-store.ts";
+import {
+  PrismaSessionStore,
+  type PrismaSessionDelegate,
+  type PrismaSessionRow,
+} from "../prisma-session-store.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,6 +59,37 @@ function make_adapter(rows: DrizzleSessionRow[] = []): DrizzleSessionAdapter & {
     delete: vi.fn(async (id) => {
       deleted.push(id);
       return store.delete(id);
+    }),
+  };
+}
+
+function make_prisma_delegate(rows: PrismaSessionRow[] = []): PrismaSessionDelegate & {
+  upserted: PrismaSessionRow[];
+  deleted: string[];
+} {
+  const store = new Map(rows.map((r) => [r.id, r]));
+  const upserted: PrismaSessionRow[] = [];
+  const deleted: string[] = [];
+
+  return {
+    upserted,
+    deleted,
+    findMany: vi.fn(async () =>
+      [...store.values()].sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))),
+    ),
+    findUnique: vi.fn(async ({ where }) => {
+      const row = store.get(where.id);
+      return row ? { metadata: row.metadata, messages: row.messages } : null;
+    }),
+    upsert: vi.fn(async ({ where, create, update }) => {
+      const existing = store.get(where.id);
+      const row = existing ? { ...existing, ...update } : create;
+      store.set(where.id, row);
+      upserted.push(row);
+    }),
+    deleteMany: vi.fn(async ({ where }) => {
+      deleted.push(where.id);
+      return { count: store.delete(where.id) ? 1 : 0 };
     }),
   };
 }
@@ -305,6 +341,85 @@ describe("DrizzleSessionStore – delete", () => {
 
     await store.delete("x");
     expect(adapter.delete).toHaveBeenCalledWith("x");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PrismaSessionStore
+// ---------------------------------------------------------------------------
+
+describe("PrismaSessionStore", () => {
+  it("lists sessions using the Prisma delegate without importing Prisma", async () => {
+    const older = make_row("old", { updated_at: "2024-01-01T00:00:00.000Z" });
+    const newer = make_row("new", { updated_at: "2024-01-03T00:00:00.000Z" });
+    const delegate = make_prisma_delegate([older, newer]);
+    const store = new PrismaSessionStore(delegate);
+
+    const sessions = await store.list();
+
+    expect(delegate.findMany).toHaveBeenCalledWith({
+      select: { id: true, metadata: true, messages: true, updated_at: true },
+      orderBy: { updated_at: "desc" },
+    });
+    expect(sessions[0].id).toBe("new");
+    expect(sessions[1].id).toBe("old");
+  });
+
+  it("returns undefined when Prisma findUnique returns null", async () => {
+    const store = new PrismaSessionStore(make_prisma_delegate());
+
+    await expect(store.load("missing")).resolves.toBeUndefined();
+  });
+
+  it("loads metadata with id attached and messages preserved", async () => {
+    const row = make_row("sess-1", {
+      metadata: {
+        created_at: "2024-01-01T00:00:00.000Z",
+        updated_at: "2024-01-01T00:00:00.000Z",
+        message_count: 1,
+        label: "Prisma session",
+      },
+      messages: [make_message("hello")],
+    });
+    const store = new PrismaSessionStore(make_prisma_delegate([row]));
+
+    const result = await store.load("sess-1");
+
+    expect(result?.metadata.id).toBe("sess-1");
+    expect(result?.metadata.label).toBe("Prisma session");
+    expect(result?.messages).toEqual([make_message("hello")]);
+  });
+
+  it("saves with upsert and preserves existing created_at", async () => {
+    const delegate = make_prisma_delegate([
+      make_row("s", {
+        metadata: {
+          created_at: "2023-01-01T00:00:00.000Z",
+          updated_at: "2023-01-01T00:00:00.000Z",
+          message_count: 0,
+        },
+      }),
+    ]);
+    const store = new PrismaSessionStore(delegate);
+
+    await store.save("s", [make_message("new")], { label: "Saved" });
+
+    expect(delegate.upsert).toHaveBeenCalledOnce();
+    const [row] = delegate.upserted;
+    expect(row.id).toBe("s");
+    expect(row.messages).toEqual([make_message("new")]);
+    expect((row.metadata as { created_at: string }).created_at).toBe("2023-01-01T00:00:00.000Z");
+    expect((row.metadata as { label: string }).label).toBe("Saved");
+    expect((row.metadata as { message_count: number }).message_count).toBe(1);
+  });
+
+  it("deletes with deleteMany so missing rows return false", async () => {
+    const delegate = make_prisma_delegate([make_row("to-delete")]);
+    const store = new PrismaSessionStore(delegate);
+
+    await expect(store.delete("to-delete")).resolves.toBe(true);
+    await expect(store.delete("ghost")).resolves.toBe(false);
+    expect(delegate.deleted).toEqual(["to-delete", "ghost"]);
   });
 });
 

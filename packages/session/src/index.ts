@@ -17,3 +17,8 @@ export {
   type DrizzleSessionAdapter,
   type DrizzleSessionRow,
 } from "./drizzle-session-store.ts";
+export {
+  PrismaSessionStore,
+  type PrismaSessionDelegate,
+  type PrismaSessionRow,
+} from "./prisma-session-store.ts";
